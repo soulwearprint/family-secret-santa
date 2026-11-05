@@ -560,3 +560,37 @@ def test_fixed_pairs(client):
     assert pairs["Anna"] == "Bela" and pairs["Nagymama"] == "Peti"
     ok(c.delete(f"/api/years/2026/fixed/{ids['Anna']}"))
     assert len(ok(c.get("/api/years/2026/fixed"))) == 1
+
+
+def test_resend_api_delivery(client, monkeypatch):
+    """On Railway SMTP may be blocked; RESEND_API_KEY switches to Resend's HTTPS API."""
+    import httpx
+    sent = []
+
+    class Resp:
+        def __init__(self, code, text=""):
+            self.status_code, self.text = code, text
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        sent.append((url, json, headers))
+        return Resp(422, '{"message":"domain not verified"}') if "bad" in json["to"][0] else Resp(200)
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_dummy")
+    monkeypatch.setenv("MAIL_FROM", "santa@family.example")
+    monkeypatch.setattr(httpx, "post", fake_post)
+    c = client
+    assert ok(c.get("/api/status"))["mail_mode"] == "resend"
+    ok(c.post("/api/setup", json={"name": "Mom", "password": "secret1"}))
+    ids = add_people(c, ["Anna", "Bela"])
+    ok(c.post("/api/members", json={"name": "Csilla", "email": "bad@fam.test"}))
+    ok(c.post("/api/years", json={"year": 2026}))
+    ok(c.post("/api/years/2026/draw", json={}))
+    res = ok(c.post("/api/years/2026/notify", json={}))
+    by_name = {r["name"]: r for r in res["results"]}
+    assert by_name["Anna"]["ok"] and by_name["Bela"]["ok"]
+    assert not by_name["Csilla"]["ok"] and "domain not verified" in by_name["Csilla"]["error"]
+    url, payload, headers = sent[0]
+    assert url == "https://api.resend.com/emails" and headers["Authorization"] == "Bearer re_test_dummy"
+    assert len(payload["to"]) == 1 and "santa@family.example" in payload["from"]
+    assert "★" in payload["text"] and "<html" in payload["html"] and "★" not in payload["subject"]
+    assert "re_test_dummy" not in by_name["Csilla"]["error"]

@@ -4,13 +4,11 @@ A small self-hosted app for a family Secret Santa: keep a family list with
 e-mail addresses, draw names secretly each year, and e-mail every person
 their own postcard from the North Pole.
 
-Python 3.11+ · FastAPI · SQLite · no build step. It is self-contained and
-unrelated to the rest of this repository.
+Python 3.11+ · FastAPI · SQLite · no build step.
 
 ## Run it
 
 ```bash
-cd secret-santa
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # fill in SMTP settings to send real e-mail
@@ -18,6 +16,10 @@ uvicorn app.main:app --env-file .env --port 8080
 ```
 
 Open http://localhost:8080 and create the first admin.
+
+On macOS, don't use the built-in `/usr/bin/python3` (Python 3.9 with
+LibreSSL). It can't run this app. Install a current Python, for example
+`brew install python@3.12`, and create the `.venv` with that one.
 
 Tests: `pip install -r requirements-dev.txt && python -m pytest -q`
 
@@ -211,8 +213,7 @@ mount a persistent volume at `/data`.
 
 Hosts that fit:
 
-- **Railway**: a service from this repository, with root directory
-  `secret-santa` and a volume at `/data`.
+- **Railway**: a service from this repository, with a volume at `/data`.
 - **Fly.io**: one machine with a volume.
 - **Google Cloud Compute Engine**: a small VM such as `e2-micro`, running
   the container.

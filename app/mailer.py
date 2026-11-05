@@ -125,7 +125,31 @@ class Letter:
 
 
 def mode() -> str:
+    """resend (HTTPS API) > smtp > outbox (files only, for local testing)."""
+    if os.environ.get("RESEND_API_KEY"):
+        return "resend"
     return "smtp" if os.environ.get("SMTP_HOST") else "outbox"
+
+
+RESEND_URL = "https://api.resend.com/emails"
+
+
+def _send_resend(msg: EmailMessage) -> None:
+    """Send through Resend's HTTPS API. Needed on hosts that block outbound SMTP (e.g. Railway)."""
+    import httpx
+
+    payload = {
+        "from": str(msg["From"]),
+        "to": [str(msg["To"])],
+        "subject": str(msg["Subject"]),
+        "text": msg.get_body(("plain",)).get_content(),
+        "html": msg.get_body(("html",)).get_content(),
+    }
+    r = httpx.post(RESEND_URL, json=payload, timeout=20.0,
+                   headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"})
+    if r.status_code >= 300:
+        # Resend's error JSON names the problem (e.g. unverified domain); never echo the key
+        raise RuntimeError(f"Resend API {r.status_code}: {r.text[:200]}")
 
 
 def outbox_dir() -> Path:
@@ -289,6 +313,9 @@ def deliver(msg: EmailMessage, to_email: str, tag: str, for_name: str = "") -> N
         if for_name:
             safe += "_for_" + "".join(c if c.isalnum() else "_" for c in for_name)
         (out / f"{tag}_{safe}.eml").write_bytes(bytes(msg))
+        return
+    if mode() == "resend":
+        _send_resend(msg)
         return
     host = os.environ["SMTP_HOST"]
     port = int(os.environ.get("SMTP_PORT", "465"))

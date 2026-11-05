@@ -211,6 +211,23 @@ mount a persistent volume at `/data`.
    digest live in memory.
 4. Back up `/data/santa.db`. Keep `SANTA_SERVER_KEY` somewhere else.
 
+### Railway, step by step
+
+1. In the Railway project, go to **New → GitHub Repo →
+   `soulwearprint/family-secret-santa`**. Railway reads `railway.json`, which
+   sets a Dockerfile build, one replica, and a health check on `/api/status`.
+2. In the service, go to **Settings → Networking → Generate Domain**.
+3. Right-click the service, choose **Attach volume**, and set the mount path
+   to `/data`.
+4. In **Variables → Raw Editor**, set `PUBLIC_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}`,
+   `SANTA_SECURE_COOKIE=1`, `SANTA_SERVER_KEY`, `RESEND_API_KEY` and
+   `MAIL_FROM`.
+5. Once it deploys, open the domain. The first visit shows **Create the
+   first admin**.
+
+Email: Railway may block outbound SMTP, depending on your plan, so set
+`RESEND_API_KEY` to use Resend's HTTPS API instead.
+
 Hosts that fit:
 
 - **Railway**: a service from this repository, with a volume at `/data`.

@@ -804,6 +804,7 @@ async function wishEditor(y, memberId) {
   const all = await api(`/api/years/${y.year}/wishes`);
   let person = all.find((p) => p.id === memberId);
   const base = `/api/years/${y.year}/wishes/${memberId}`;
+  const sources = await api(`${base}/copy-sources`);
   const body = () => `<h2>🎁 Gift ideas — ${esc(person.name)}</h2>
     <p class="hint">${esc(y.label)}${y.budget ? ` · budget ${esc(y.budget)}` : ""}</p>
     <ul class="mine">${person.wishes.map((w) => `<li style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">
@@ -821,6 +822,10 @@ async function wishEditor(y, memberId) {
       <div><label>Link (optional)</label><input id="wurl" maxlength="500"></div>
       <div style="flex:0 0 auto"><button type="button" class="small" data-act="add">Add</button></div>
     </div>
+    ${sources.length ? `<div class="row" style="margin-top:6px">
+      <div><label>📋 Copy their ideas from another draw</label><select id="wcopy">${sources.map((x) =>
+        `<option value="${x.draw}">${esc(x.label)} (${x.count})</option>`).join("")}</select></div>
+      <div style="flex:0 0 auto"><button type="button" class="small secondary" data-act="copy">Copy</button></div></div>` : ""}
     <p class="err" id="werr"></p>`;
   const dlg = $("#dlg");
   const refresh = () => { $("#dlg-body").innerHTML = body(); };
@@ -830,7 +835,9 @@ async function wishEditor(y, memberId) {
     e.preventDefault();
     try {
       let res;
-      if (b.dataset.act === "add") {
+      if (b.dataset.act === "copy") {
+        res = await api(`${base}/copy`, { method: "POST", body: { draw: +$("#wcopy").value } });
+      } else if (b.dataset.act === "add") {
         const text = $("#wtext").value.trim();
         if (!text) return;
         res = await api(base, { method: "POST", body: { text, url: $("#wurl").value.trim() } });

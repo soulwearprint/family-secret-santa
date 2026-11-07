@@ -1457,6 +1457,80 @@ def _obsolete_change(wish_id: str, body: "ObsoleteIn"):
     return change
 
 
+def _copy_sources(conn, year: int, member_id: int) -> list[dict]:
+    """Other draws in which this person has gift ideas that are still wanted."""
+    out = []
+    for r in conn.execute("SELECT w.year, w.items, y.* FROM wishes w JOIN years y ON y.year = w.year "
+                          "WHERE w.member_id = ? AND w.year != ? ORDER BY y.cal_year DESC, y.name COLLATE NOCASE",
+                          (member_id, year)).fetchall():
+        n = len([i for i in json.loads(r["items"]) if not i.get("obsolete")])
+        if n:
+            out.append({"draw": r["year"], "label": _label(r), "count": n})
+    return out
+
+
+def _copy_change(source: list[dict], result: dict):
+    """Append the source's wanted ideas that aren't on the list yet, up to the limit.
+    Copies start as 'not sent', so this draw's Secret Santa hears about them."""
+    def change(items):
+        have = {i["text"].strip().lower() for i in items if not i["obsolete"]}
+        room = MAX_WISHES - len(have)
+        for src in source:
+            if src["obsolete"] or src["text"].strip().lower() in have:
+                result["skipped"] += 1
+                continue
+            if room <= 0:
+                result["skipped"] += 1
+                continue
+            items.append({"id": secrets.token_hex(4), "text": src["text"], "url": src.get("url", ""),
+                          "sent": False, "obsolete": False, "reason": "", "obsolete_sent": False})
+            have.add(src["text"].strip().lower())
+            room -= 1
+            result["copied"] += 1
+    return change
+
+
+class CopyIn(BaseModel):
+    draw: int  # copy from this draw
+
+
+def _source_items(year: int, member_id: int, from_draw: int) -> list[dict]:
+    with db.connect() as conn:
+        if from_draw == year or not any(x["draw"] == from_draw for x in _copy_sources(conn, year, member_id)):
+            raise HTTPException(404, "Nothing to copy from that draw.")
+        return _items(conn, from_draw, member_id)
+
+
+@app.get("/api/p/{token}/copy-sources")
+def participant_copy_sources(token: str):
+    with db.connect() as conn:
+        row, _ = _link(conn, token)
+        return _copy_sources(conn, row["year"], row["member_id"])
+
+
+@app.post("/api/p/{token}/copy")
+def participant_copy(token: str, body: CopyIn):
+    with db.connect() as conn:
+        row, _ = _link(conn, token)
+    result = {"copied": 0, "skipped": 0}
+    out = _mutate(token, _copy_change(_source_items(row["year"], row["member_id"], body.draw), result))
+    return {**out, **result}
+
+
+@app.get("/api/years/{year}/wishes/{member_id}/copy-sources")
+def admin_copy_sources(year: int, member_id: int, s: Session = Depends(current)):
+    with db.connect() as conn:
+        _year_or_404(conn, year)
+        return _copy_sources(conn, year, member_id)
+
+
+@app.post("/api/years/{year}/wishes/{member_id}/copy")
+def admin_copy(year: int, member_id: int, body: CopyIn, s: Session = Depends(current)):
+    result = {"copied": 0, "skipped": 0}
+    out = _admin_mutate(s, year, member_id, _copy_change(_source_items(year, member_id, body.draw), result))
+    return {**out, **result}
+
+
 @app.post("/api/p/{token}/wishes")
 def add_wish(token: str, body: WishIn):
     return _mutate(token, _add_change(body))

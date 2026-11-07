@@ -181,6 +181,18 @@ the person's own page:
 To queue a digest, the server looks up the person's Secret Santa from the
 draw with the admin's session key. The admin never sees that name.
 
+### Copying gift ideas between draws
+
+Someone in several draws can copy their ideas from another draw with
+**📋 Copy my ideas from another draw** on their personal page. An admin can
+do the same in the idea editor.
+
+- **What is copied:** only ideas that are still wanted. Ideas already on the
+  list are skipped (ignoring upper/lower case).
+- **The limit of 5 still applies.**
+- **Copies count as new** in the target draw, so that draw's Secret Santa
+  hears about them in the next digest.
+
 ### Card designs (per draw)
 
 The **🎨 Card design** tab sets each draw's look for the postcards,

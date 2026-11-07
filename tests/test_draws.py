@@ -114,3 +114,47 @@ def test_admin_edits_gift_ideas_with_the_same_rules(fam, tmp_path):
     assert email.utils.parseaddr(msg["To"])[0] == santa and "Scarf" in text and "Puzzle" in text
     log = [a["action"] for a in ok(c.get("/api/audit"))]
     assert "gift ideas edited by admin" in log
+
+
+def test_copy_gift_ideas_from_another_draw(fam, tmp_path):
+    from app import main
+    c, ids = fam
+    big = ok(c.post("/api/draws", json={"cal_year": 2026, "name": "Everyone", "source": "everyone"}))["year"]
+    gid = ok(c.post("/api/groups", json={"name": "Circle", "member_ids": [ids[n] for n in ["Anna", "Bela", "Csilla", "Dani"]]}))["id"]
+    small = ok(c.post("/api/draws", json={"cal_year": 2026, "name": "Circle", "source": "group", "group_id": gid}))["year"]
+    for t in ["Puzzle", "Sál", "Krimi"]:
+        ok(c.post(f"/api/years/{big}/wishes/{ids['Anna']}", json={"text": t}))
+    w = ok(c.post(f"/api/years/{small}/wishes/{ids['Anna']}", json={"text": "puzzle"}))["wishes"]  # same idea, other case
+
+    # admin side: sources list the other draw; copying skips the duplicate
+    srcs = ok(c.get(f"/api/years/{small}/wishes/{ids['Anna']}/copy-sources"))
+    assert [x["label"] for x in srcs] == ["2026 · Everyone"] and srcs[0]["count"] == 3
+    out = ok(c.post(f"/api/years/{small}/wishes/{ids['Anna']}/copy", json={"draw": big}))
+    assert out["copied"] == 2 and out["skipped"] == 1
+    assert sorted(x["text"] for x in out["wishes"]) == ["Krimi", "Sál", "puzzle"]
+    # copying again adds nothing; a draw Anna has no ideas in can't be a source
+    assert ok(c.post(f"/api/years/{small}/wishes/{ids['Anna']}/copy", json={"draw": big}))["copied"] == 0
+    assert c.post(f"/api/years/{small}/wishes/{ids['Anna']}/copy", json={"draw": small}).status_code == 404
+
+    # participant side, through Anna's personal link in the small draw
+    ok(c.post(f"/api/years/{small}/draw", json={}))
+    ok(c.post(f"/api/years/{small}/notify", json={}))
+    card = next(f for f in (tmp_path / "outbox").glob("*_Circle_anna_fam_test.eml"))
+    msg = email.message_from_bytes(card.read_bytes(), policy=email.policy.default)
+    token = msg.get_body(("plain",)).get_content().split("/p/")[1].split()[0].split("#")[0]
+    ok(c.post(f"/api/years/{big}/wishes/{ids['Anna']}", json={"text": "Bögre"}))
+    c.post("/api/logout")
+    assert [x["draw"] for x in ok(c.get(f"/api/p/{token}/copy-sources"))] == [big]
+    out = ok(c.post(f"/api/p/{token}/copy", json={"draw": big}))
+    assert out["copied"] == 1 and "Bögre" in [x["text"] for x in out["my_wishes"]]
+    # the copied idea is new for this draw's Secret Santa -> goes into the digest
+    assert main.run_digest()["sent"] == 1
+    # the limit of 5 still holds when copying
+    ok(c.post("/api/login", json={"name": "Mom", "password": "secret1"}))
+    for t in ["x1", "x2", "x3", "x4"]:
+        ok(c.post(f"/api/years/{big}/wishes/{ids['Bela']}", json={"text": t}))
+    ok(c.post(f"/api/years/{small}/wishes/{ids['Bela']}", json={"text": "own idea"}))
+    ok(c.post(f"/api/years/{small}/wishes/{ids['Bela']}", json={"text": "another"}))
+    out = ok(c.post(f"/api/years/{small}/wishes/{ids['Bela']}/copy", json={"draw": big}))
+    assert out["copied"] == 3 and out["skipped"] == 1
+    assert len([x for x in out["wishes"] if not x["obsolete"]]) == 5

@@ -20,6 +20,12 @@
     .lang-btns { display: flex; gap: 8px; flex-wrap: wrap; }
     .lang-btns button.on { background: var(--green); }
     .ok { color: var(--green); }
+    header h1 { display: flex; align-items: center; gap: 12px; }
+    #mascot { width: 54px; height: 54px; margin: -8px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.25)); }
+    #band { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 10px 0 0; }
+    #band img { width: 28px; height: 28px; }
+    #band img:nth-child(even) { width: 20px; height: 20px; }
+    .demo-note { text-align: center; font-size: 12px; color: var(--muted); padding-top: 6px; }
     ul.mine { list-style: none; padding: 0; margin: 10px 0; }
     ul.mine li { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
     ul.mine li.obs, ul.wishes li.obs { color: var(--muted); }
@@ -28,7 +34,8 @@
   </style>
 </head>
 <body>
-  <header><h1 id="title">🎅 Titkos Mikulás</h1></header>
+  <header><h1><img id="mascot" alt="" hidden><span id="title">🎅 Titkos Mikulás</span></h1></header>
+  <div id="band" aria-hidden="true"></div>
   <main id="app"><p class="muted">…</p></main>
 
 <script>
@@ -104,10 +111,48 @@ const T = {
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const token = location.pathname.split("/").pop();
+const DEMO = token === "demo";  // design preview from the admin page: sample data, nothing is saved
 const wantLang = location.hash === "#lang";
 let data, t;
 
+function demoData(lang) {
+  const hu = lang !== "en";
+  return {
+    name: "Rudolf", lang: hu ? "hu" : "en", year: new Date().getFullYear(),
+    budget: hu ? "10 000 Ft" : "€30", exchange_date: hu ? "december 24., vacsora után" : "24 December, after dinner",
+    my_wishes: [{ id: "a", text: hu ? "Egy jó krimi" : "A good crime novel", url: "", sent: true, obsolete: false, reason: "" },
+                { id: "b", text: hu ? "Gyapjúzokni, 38-as" : "Wool socks, size 38", url: "", sent: false, obsolete: false, reason: "" }],
+    giftee: { name: hu ? "Mikulásné" : "Mrs. Claus", wishes: [
+      { text: hu ? "Puzzle, 1000 darabos" : "A 1000-piece puzzle", url: "", obsolete: false, reason: "" },
+      { text: hu ? "Bögre" : "A mug", url: "", obsolete: true, reason: "got_it" }] },
+    drawn: true, helper: "", max_wishes: 5, digest_hour: 18,
+  };
+}
+
+function applyDesign(d) {
+  if (!d) return;
+  const r = document.documentElement.style;
+  r.setProperty("--bg", d.paper); r.setProperty("--ink", d.ink); r.setProperty("--muted", d.muted);
+  r.setProperty("--red", d.accent); r.setProperty("--gold", d.accent); r.setProperty("--green", d.bg);
+  document.body.style.fontFamily = d.font;
+  const h = document.querySelector("header");
+  h.style.background = d.bg;
+  h.style.borderImage = `repeating-linear-gradient(90deg, ${d.accent} 0 14px, #fff 14px 22px) 6`;
+  document.querySelectorAll("h2").forEach((x) => (x.style.fontFamily = d.font));
+  const art = (n) => `/static/art/svg/${n}.svg`;
+  const m = $("#mascot");
+  const mascot = d.animal || (d.santa_face || d.santa_full ? "santa_face" : "");
+  if (mascot) { m.src = art(mascot); m.hidden = false; $("#title").textContent = $("#title").textContent.replace("🎅 ", ""); }
+  $("#band").innerHTML = (d.band || []).length
+    ? Array.from({ length: 7 }, (_, i) => `<img src="${art(d.band[i % d.band.length])}" alt="">`).join("") : "";
+}
+
 async function call(method, path, body) {
+  if (DEMO) {  // preview: pretend it worked, keep it in memory only
+    if (method === "POST" && path === "/wishes") data.my_wishes.push({ id: String(Math.random()), ...body, sent: false, obsolete: false, reason: "" });
+    if (method === "DELETE") data.my_wishes = data.my_wishes.filter((w) => !path.endsWith(w.id));
+    return { my_wishes: data.my_wishes };
+  }
   const res = await fetch(`/api/p/${encodeURIComponent(token)}${path}`, {
     method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined,
   });
@@ -129,6 +174,7 @@ function render() {
   document.title = t.title(data.year).replace("🎅 ", "");
   $("#title").textContent = t.title(data.year);
   const g = data.giftee;
+  setTimeout(() => applyDesign(data.design), 0);
   $("#app").innerHTML = `
     <section class="card">
       <h2>${esc(t.hello(data.name))}</h2>
@@ -228,6 +274,14 @@ function renderMine() {
 }
 
 (async () => {
+  if (DEMO) {
+    const p = new URLSearchParams(location.hash.slice(1));
+    data = demoData(p.get("lang"));
+    try { data.design = await (await fetch(`/api/themes/tokens?t=${encodeURIComponent(p.get("t") || "")}`)).json(); } catch (_) {}
+    render();
+    $("#app").insertAdjacentHTML("afterbegin", `<p class="demo-note">${data.lang === "hu" ? "Előnézet – minta adatokkal, semmi nem mentődik." : "Preview with sample data — nothing is saved."}</p>`);
+    return;
+  }
   try { data = await call("GET", ""); }
   catch (err) {
     const lang = navigator.language?.startsWith("hu") ? "hu" : "en";

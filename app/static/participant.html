@@ -172,7 +172,7 @@ function render() {
   t = T[data.lang] || T.hu;
   document.documentElement.lang = data.lang;
   document.title = t.title(data.year).replace("🎅 ", "");
-  $("#title").textContent = t.title(data.year);
+  $("#title").textContent = t.title(data.year) + (data.draw_name ? ` · ${data.draw_name}` : "");
   const g = data.giftee;
   setTimeout(() => applyDesign(data.design), 0);
   $("#app").innerHTML = `

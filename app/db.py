@@ -97,6 +97,19 @@ CREATE TABLE IF NOT EXISTS fixed_pairs (
     CHECK (giver_id != receiver_id)
 );
 
+-- reusable named groups of people (family circle, cousins, …); a person can be in any number
+CREATE TABLE IF NOT EXISTS groups (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id  INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    PRIMARY KEY (group_id, member_id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -135,6 +148,12 @@ MIGRATIONS = [
     ("members", "helper_id", "INTEGER REFERENCES members(id)"),
     # the year's card design as JSON (see app/themes.py); '' = default
     ("years", "theme", "TEXT NOT NULL DEFAULT ''"),
+    # Several named draws per calendar year. NOTE: years.year (and the `year`
+    # column of every per-draw table) is the *draw id*. Draws created before
+    # this keep id == calendar year, so their encrypted rows stay valid.
+    ("years", "cal_year", "INTEGER"),
+    ("years", "name", "TEXT NOT NULL DEFAULT ''"),
+    ("years", "avoid_parallel", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 
@@ -148,6 +167,7 @@ def init() -> None:
             if col not in cols:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS admins_google_email ON admins (google_email COLLATE NOCASE)")
+        conn.execute("UPDATE years SET cal_year = year WHERE cal_year IS NULL")
 
 
 def get_setting(conn: sqlite3.Connection, key: str) -> str | None:

@@ -122,6 +122,7 @@ class Letter:
     helper_name: str = ""  # set when the mail goes to a helper on the giver's behalf
     theme: dict | None = None  # the year's card design (see themes.py)
     asset_base: str = ""       # public site URL, for the artwork images; "" = no images
+    draw_name: str = ""        # e.g. "Family circle", when someone is in several draws
 
     @property
     def t(self) -> dict[str, str]:
@@ -162,12 +163,17 @@ def outbox_dir() -> Path:
 
 def subject(l: Letter) -> str:
     # Deliberately does NOT contain the receiver: subjects show up on lock screens.
-    return l.t["subject"].format(giver=l.giver_name)
+    return l.t["subject"].format(giver=l.giver_name) + _suffix(l.draw_name)
+
+
+def _suffix(draw_name: str) -> str:
+    return f" · {draw_name}" if draw_name else ""
 
 
 def render_text(l: Letter) -> str:
     t = l.t
-    lines = [*on_behalf_text(l.lang, l.helper_name, l.giver_name), t["greeting"].format(giver=l.giver_name), ""]
+    lines = [*on_behalf_text(l.lang, l.helper_name, l.giver_name), *([f"🎄 {l.draw_name}", ""] if l.draw_name else []),
+             t["greeting"].format(giver=l.giver_name), ""]
     if l.updated:
         lines += [t["updated_text"], ""]
     lines += [t["body_text"].format(year=l.year), "", f"    ★ {l.receiver_name} ★", ""]
@@ -241,7 +247,7 @@ def render_html(l: Letter) -> str:
         {note}
         {page}
         <p style="margin:16px 0 0;font-size:14px;line-height:1.5;">{t["secret"]}</p>"""
-    return _frame(tk, l.lang, subject(l), t["preheader"], t["header"], inner,
+    return _frame(tk, l.lang, subject(l), t["preheader"], t["header"] + e(_suffix(l.draw_name)), inner,
                   t["footer"].format(giver=giver) + switch, l.asset_base, stamp=stamp, postmark=postmark,
                   stamp_uses_santa=not tk["animal"])
 
@@ -260,7 +266,8 @@ def build_message(l: Letter) -> EmailMessage:
 
 
 def send(l: Letter) -> None:
-    deliver(build_message(l), l.giver_email, f"{l.year}", for_name=l.giver_name if l.helper_name else "")
+    tag = f"{l.year}" + ("_" + "".join(c if c.isalnum() else "_" for c in l.draw_name) if l.draw_name else "")
+    deliver(build_message(l), l.giver_email, tag, for_name=l.giver_name if l.helper_name else "")
 
 
 def deliver(msg: EmailMessage, to_email: str, tag: str, for_name: str = "") -> None:
@@ -454,7 +461,8 @@ INVITE = {
 
 
 def build_invite(name: str, to_email: str, lang: str, year: int, budget: str, url: str,
-                 helper_name: str = "", theme: dict | None = None, asset_base: str = "") -> EmailMessage:
+                 helper_name: str = "", theme: dict | None = None, asset_base: str = "",
+                 draw_name: str = "") -> EmailMessage:
     e = html.escape
     t = INVITE.get(lang, INVITE[DEFAULT_LANG])
     tk = themes.tokens(theme)
@@ -467,13 +475,14 @@ def build_invite(name: str, to_email: str, lang: str, year: int, budget: str, ur
         + f'<p style="margin:12px 0 0;font-size:14px;line-height:1.5;">{t["after"]}</p>'
     )
     text = "\n".join([
-        *on_behalf_text(lang, helper_name, name), t["greeting"].format(name=name), "", t["body"].format(year=year), "",
+        *on_behalf_text(lang, helper_name, name), *([f"🎄 {draw_name}", ""] if draw_name else []),
+        t["greeting"].format(name=name), "", t["body"].format(year=year), "",
         *([t["budget_text"].format(budget=budget), ""] if budget else []),
         t["text_link"], url, "", t["after"],
     ])
-    subj = t["subject"].format(name=name)
+    subj = t["subject"].format(name=name) + _suffix(draw_name)
     return _envelope(lang, helper_name or name, to_email, subj, text,
-                     _frame(tk, lang, subj, t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"], inner,
+                     _frame(tk, lang, subj, t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"] + e(_suffix(draw_name)), inner,
                             t["footer"].format(url=e(url)).replace("#8a6a45", tk["muted"]), asset_base))
 
 
@@ -521,7 +530,7 @@ DIGEST = {
 
 def build_digest(name: str, to_email: str, lang: str, receiver: str, new_items: list, gone_items: list,
                  current: list, budget: str, helper_name: str = "", theme: dict | None = None,
-                 asset_base: str = "") -> EmailMessage:
+                 asset_base: str = "", draw_name: str = "") -> EmailMessage:
     e = html.escape
     t = DIGEST.get(lang, DIGEST[DEFAULT_LANG])
     tk = themes.tokens(theme)
@@ -544,12 +553,14 @@ def build_digest(name: str, to_email: str, lang: str, receiver: str, new_items: 
     )
     fmt = lambda items: [f"  - {w['text']}" + (f" ({w['url']})" if w.get("url") else "") for w in items]
     text = "\n".join([
-        *on_behalf_text(lang, helper_name, name), t["greeting"].format(name=name), "", t["intro_text"].format(receiver=receiver), "",
+        *on_behalf_text(lang, helper_name, name), *([f"🎄 {draw_name}", ""] if draw_name else []),
+        t["greeting"].format(name=name), "", t["intro_text"].format(receiver=receiver), "",
         *([t["new"] + ":", *fmt(new_items), ""] if new_items else []),
         *([t["gone"] + ":", *[f"  - {i['text']} ({reasons.get(i['reason'], reasons['other'])})" for i in gone_items], ""] if gone_items else []),
         t["all"] + ":", *(fmt(current) or ["  " + t["empty"]]), "",
         *([t["budget_text"].format(budget=budget), ""] if budget else []), t["hint"],
     ])
-    return _envelope(lang, helper_name or name, to_email, t["subject"], text,
-                     _frame(tk, lang, t["subject"], t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"],
+    subj = t["subject"] + _suffix(draw_name)
+    return _envelope(lang, helper_name or name, to_email, subj, text,
+                     _frame(tk, lang, subj, t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"] + e(_suffix(draw_name)),
                             inner, t["footer"], asset_base))

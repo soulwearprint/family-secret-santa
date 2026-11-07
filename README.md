@@ -140,6 +140,36 @@ Participants don't need a login. Every postcard carries a random private link
 Set `PUBLIC_URL` so the links in the cards use your real address. Without it,
 the address the admin used to open the app is used.
 
+### Card designs (per year)
+
+The **🎨 Card design** tab sets each year's look for the postcards,
+invitations, digests and personal pages. You mix and match:
+
+| Part | Choices |
+|---|---|
+| Base theme | Classic (pine & cream), Nordic frost, Gingerbread, Midnight & gold, Snowy forest, Candy cane |
+| Accent colour | Christmas red, Gold, Emerald, Ice blue, Berry, Copper, Silver, Plum |
+| Font | 6 curated pairings of body text and Santa's signature, all built into Windows, macOS and iOS. Each one falls back to a matching generic font on Android and in Gmail. |
+| Theme animal | Polar bear, penguin, reindeer, deer, llama, samoyed, nordic kitten, seal, arctic fox (or none), each optionally wearing a Santa hat. It appears on the stamp and on the personal page. |
+| Decorations | Border icons (snowflakes, stars, ornaments in the accent colour, holly, candy canes, gifts, bells, little trees) plus feature pieces: a reindeer-sleigh banner, Santa as a full figure, or Santa's face |
+
+The live preview renders every e-mail type and the personal page in Hungarian
+or English, using sample names only. **🎲 Surprise me** picks a random
+combination. Nothing changes until you press **Save design**. A new year
+starts with the previous year's design.
+
+**Artwork:** each image is an SVG drawn in code in `tools/art.py`, plus a 2×
+PNG.
+
+- **E-mails** load the PNGs from `PUBLIC_URL`, because Gmail strips inline
+  SVG. Every image has emoji alt text for clients that block images.
+- **Web pages** use the SVGs.
+- **To change or add art:**
+  ```bash
+  python tools/art.py && node tools/render_art.js
+  ```
+  `render_art.js` needs Playwright with Chromium.
+
 ### Secrecy model
 
 - The matches are **encrypted at rest** with AES-256-GCM. The key is wrapped

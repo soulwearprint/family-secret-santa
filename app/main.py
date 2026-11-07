@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import crypto, db, draw, google_auth, mailer
+from . import crypto, db, draw, google_auth, mailer, themes
 
 MAX_ADMINS = 5
 SESSION_TTL = 30 * 60  # seconds, sliding
@@ -658,9 +658,9 @@ def create_year(body: YearIn, s: Session = Depends(current)):
             raise HTTPException(409, f"{body.year} already exists.")
         prev = conn.execute("SELECT * FROM years WHERE year < ? ORDER BY year DESC LIMIT 1", (body.year,)).fetchone()
         conn.execute(
-            "INSERT INTO years (year, budget, exchange_date, note, avoid_repeat, created_at) VALUES (?, ?, '', ?, ?, ?)",
+            "INSERT INTO years (year, budget, exchange_date, note, avoid_repeat, theme, created_at) VALUES (?, ?, '', ?, ?, ?, ?)",
             (body.year, prev["budget"] if prev else "", prev["note"] if prev else "",
-             prev["avoid_repeat"] if prev else 1, db.now()),
+             prev["avoid_repeat"] if prev else 1, prev["theme"] if prev else "", db.now()),
         )
         if prev:  # start from last year's list, minus archived members
             conn.execute(
@@ -696,6 +696,7 @@ def get_year(year: int, s: Session = Depends(current)):
         "year": year,
         "budget": y["budget"], "exchange_date": y["exchange_date"], "note": y["note"],
         "avoid_repeat": bool(y["avoid_repeat"]),
+        "theme": _theme_of(y),
         "participants": people,
         "drawn": st["drawn"],
         "in_sync": st["in_sync"],
@@ -833,7 +834,8 @@ def invite(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
             try:
                 name, to, helper = _recipient(conn, mid)
                 mailer.deliver(mailer.build_invite(name, to, m["lang"] or mailer.DEFAULT_LANG, year,
-                                                   y["budget"], f"{base}/p/{token}", helper),
+                                                   y["budget"], f"{base}/p/{token}", helper,
+                                                   theme=_theme_of(y), asset_base=_asset_base(request)),
                                to, f"{year}_invite", for_name=name if helper else "")
             except Exception as exc:
                 results.append({"id": mid, "name": m["name"], "ok": False, "error": type(exc).__name__ + ": " + str(exc)[:200]})
@@ -879,6 +881,7 @@ def notify(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
                 budget=y["budget"], exchange_date=y["exchange_date"], note=y["note"],
                 updated=r["notify_count"] > 0, lang=r["lang"] or mailer.DEFAULT_LANG,
                 page_url=f"{base}/p/{token}", receiver_wishes=receiver_wishes,
+                theme=_theme_of(y), asset_base=_asset_base(request),
             )
             try:
                 mailer.send(letter)
@@ -923,15 +926,104 @@ def audit_log(s: Session = Depends(current)):
 
 
 @app.get("/api/postcard/preview", response_class=HTMLResponse)
-def postcard_preview(updated: bool = False, lang: Literal["hu", "en"] = "hu", s: Session = Depends(current)):
+def postcard_preview(request: Request, updated: bool = False, lang: Literal["hu", "en"] = "hu", year: int = 0,
+                     s: Session = Depends(current)):
     """Sample postcard with made-up names (never real matches)."""
+    theme = None
+    if year:
+        with db.connect() as conn:
+            theme = _theme_of(_year_or_404(conn, year))
     return mailer.render_html(mailer.Letter(
         giver_name="Rudolf", giver_email="rudolf@example.com", receiver_name="Mikulásné" if lang == "hu" else "Mrs. Claus",
         year=time.gmtime().tm_year, budget="€30" if lang == "en" else "10 000 Ft",
         exchange_date="24 December, after dinner" if lang == "en" else "december 24., vacsora után",
         note="Handmade gifts earn bonus cookies." if lang == "en" else "A saját kézzel készített ajándékért extra sütemény jár.",
-        updated=updated, lang=lang,
+        updated=updated, lang=lang, theme=theme, asset_base=_asset_base(request),
     ))
+
+
+# ─── Card designs (themes) ─────────────────────────────────────────────────
+
+def _theme_of(year_row) -> dict:
+    try:
+        raw = json.loads(year_row["theme"]) if year_row["theme"] else None
+    except (ValueError, TypeError):
+        raw = None
+    return themes.normalize(raw)
+
+
+def _asset_base(request: Request | None) -> str:
+    """Where e-mail clients load the artwork from. Must be publicly reachable."""
+    if os.environ.get("PUBLIC_URL"):
+        return os.environ["PUBLIC_URL"].rstrip("/")
+    return str(request.base_url).rstrip("/") if request is not None else ""
+
+
+class ThemeIn(BaseModel):
+    theme: dict
+
+
+class ThemePreviewIn(BaseModel):
+    theme: dict
+    kind: Literal["postcard", "invite", "digest"] = "postcard"
+    lang: Literal["hu", "en"] = "hu"
+    year: int = 0
+
+
+@app.get("/api/themes/options")
+def theme_options(s: Session = Depends(current)):
+    return themes.options()
+
+
+@app.get("/api/themes/tokens")
+def theme_tokens(t: str = ""):
+    """Colours/fonts/artwork for a design (public: it contains nothing private).
+    Used by the personal page's preview mode (/p/demo#t=...)."""
+    try:
+        raw = json.loads(t) if t else None
+    except ValueError:
+        raw = None
+    return themes.tokens(raw)
+
+
+@app.get("/api/themes/random")
+def theme_random(s: Session = Depends(current)):
+    return themes.random_theme()
+
+
+@app.put("/api/years/{year}/theme")
+def set_year_theme(year: int, body: ThemeIn, s: Session = Depends(current)):
+    theme = themes.normalize(body.theme)
+    with db.connect() as conn:
+        _year_or_404(conn, year)
+        conn.execute("UPDATE years SET theme = ? WHERE year = ?", (json.dumps(theme), year))
+        db.audit(conn, s.admin_name, "card design changed", f"{year}: {theme['base']}/{theme['accent']}/{theme['animal']}")
+    return theme
+
+
+@app.post("/api/themes/preview", response_class=HTMLResponse)
+def theme_preview(body: ThemePreviewIn, request: Request, s: Session = Depends(current)):
+    """Render any of the e-mails with sample names (never real data) in the given design."""
+    hu = body.lang == "hu"
+    year = body.year or time.gmtime().tm_year
+    budget = "10 000 Ft" if hu else "€30"
+    base = _asset_base(request)
+    sample_wishes = ([{"text": "Puzzle, 1000 darabos", "url": ""}, {"text": "Meleg sál (zöld)", "url": ""}] if hu else
+                     [{"text": "A 1000-piece puzzle", "url": ""}, {"text": "A warm green scarf", "url": ""}])
+    if body.kind == "invite":
+        msg = mailer.build_invite("Rudolf", "rudolf@example.com", body.lang, year, budget, f"{base}/p/demo",
+                                  theme=body.theme, asset_base=base)
+    elif body.kind == "digest":
+        msg = mailer.build_digest("Rudolf", "rudolf@example.com", body.lang, "Mikulásné" if hu else "Mrs. Claus",
+                                  sample_wishes[1:], [{"text": "Bögre" if hu else "A mug", "reason": "got_it"}],
+                                  sample_wishes, budget, theme=body.theme, asset_base=base)
+    else:
+        return mailer.render_html(mailer.Letter(
+            giver_name="Rudolf", giver_email="rudolf@example.com", receiver_name="Mikulásné" if hu else "Mrs. Claus",
+            year=year, budget=budget, exchange_date="december 24., vacsora után" if hu else "24 December, after dinner",
+            lang=body.lang, page_url=f"{base}/p/demo", receiver_wishes=sample_wishes, theme=body.theme, asset_base=base,
+        ))
+    return msg.get_body(("html",)).get_content()
 
 
 # ─── Daily digest ──────────────────────────────────────────────────────────
@@ -1146,7 +1238,8 @@ def run_digest() -> dict:
             try:
                 g_name, to, helper = _recipient(conn, giver)
                 mailer.deliver(mailer.build_digest(g_name, to, g["lang"] or mailer.DEFAULT_LANG, r_name,
-                                                   new, gone, _active(items), y["budget"], helper),
+                                                   new, gone, _active(items), y["budget"], helper,
+                                                   theme=_theme_of(y), asset_base=_asset_base(None)),
                                to, f"{year}_ideas", for_name=g_name if helper else "")
             except Exception as exc:  # keep it queued; try again next run
                 failed += 1
@@ -1205,6 +1298,7 @@ def participant_page(token: str):
                       {"name": names.get(receiver, "?"), "wishes": _giver_view(_items(conn, row["year"], receiver))},
             "drawn": _state(conn, row["year"])["drawn"],
             "helper": _recipient(conn, row["member_id"])[2],
+            "design": themes.tokens(_theme_of(y)),
             "max_wishes": MAX_WISHES,
             "digest_hour": DIGEST_HOUR,
         }
@@ -1277,7 +1371,8 @@ def participant_lang(token: str, body: LangIn, request: Request):
             y = _year_or_404(conn, row["year"])
             name, to, helper = _recipient(conn, row["member_id"])
             mailer.deliver(mailer.build_invite(name, to, body.lang, row["year"], y["budget"],
-                                               f"{_public_base(request)}/p/{token}", helper),
+                                               f"{_public_base(request)}/p/{token}", helper,
+                                               theme=_theme_of(y), asset_base=_asset_base(request)),
                            to, f"{row['year']}_invite", for_name=name if helper else "")
         elif body.resend:
             y = _year_or_404(conn, row["year"])
@@ -1288,6 +1383,7 @@ def participant_lang(token: str, body: LangIn, request: Request):
                 year=row["year"], budget=y["budget"], exchange_date=y["exchange_date"], note=y["note"],
                 lang=body.lang, page_url=f"{_public_base(request)}/p/{token}",
                 receiver_wishes=_active(_items(conn, row["year"], receiver)),
+                theme=_theme_of(y), asset_base=_asset_base(request),
             ))
     return {"ok": True}
 

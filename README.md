@@ -140,9 +140,62 @@ Participants don't need a login. Every postcard carries a random private link
 Set `PUBLIC_URL` so the links in the cards use your real address. Without it,
 the address the admin used to open the app is used.
 
-### Card designs (per year)
+### Several draws at once, and groups
 
-The **🎨 Card design** tab sets each year's look for the postcards,
+A **draw** is a calendar year plus an optional name, for example
+**2026 · Family circle**, **2026 · Everyone** or **2026 · Lucky 6**. You can
+run any number of draws side by side.
+
+- **Each draw has its own:**
+  - participants, matches, fixed pairs and rules
+  - budget and card design
+  - postcards, links, gift ideas and digests
+- **Someone in two draws** gets two postcards. Each card names its draw in
+  the subject and the header.
+- **Groups** (Family tab) are reusable named lists of people, and anyone can
+  be in any number of groups. **＋ New draw** takes its people from one of:
+  - last year's draw with the same name
+  - everyone
+  - a group
+  - a random *N* people from a group or from everyone
+  - nobody yet
+- **Rules:**
+  - *No repeat* compares with last year's draw **of the same name**.
+  - *Not in two draws*, on by default, stops anyone getting the same giftee
+    in two draws of the same year.
+- **Under the hood:** `years.year` holds the *draw id*. Draws made before
+  named draws keep `id = calendar year`, so their encrypted rows stay valid.
+  New draws get ids above 100000.
+
+### Admins editing gift ideas
+
+In each draw, **🎁 Gift ideas → ✏️ Edit** lets an admin manage anyone's ideas,
+for example for small children or grandparents. The rules are the same as on
+the person's own page:
+
+- ideas their Secret Santa hasn't received yet can be removed;
+- ideas already received can only be marked *no longer wanted* (with a
+  reason) or restored;
+- changes go into the daily digest.
+
+To queue a digest, the server looks up the person's Secret Santa from the
+draw with the admin's session key. The admin never sees that name.
+
+### Copying gift ideas between draws
+
+Someone in several draws can copy their ideas from another draw with
+**📋 Copy my ideas from another draw** on their personal page. An admin can
+do the same in the idea editor.
+
+- **What is copied:** only ideas that are still wanted. Ideas already on the
+  list are skipped (ignoring upper/lower case).
+- **The limit of 5 still applies.**
+- **Copies count as new** in the target draw, so that draw's Secret Santa
+  hears about them in the next digest.
+
+### Card designs (per draw)
+
+The **🎨 Card design** tab sets each draw's look for the postcards,
 invitations, digests and personal pages. You mix and match:
 
 | Part | Choices |
@@ -155,8 +208,8 @@ invitations, digests and personal pages. You mix and match:
 
 The live preview renders every e-mail type and the personal page in Hungarian
 or English, using sample names only. **🎲 Surprise me** picks a random
-combination. Nothing changes until you press **Save design**. A new year
-starts with the previous year's design.
+combination. Nothing changes until you press **Save design**. A new draw
+starts with the design of last year's draw with the same name.
 
 **Artwork:** each image is an SVG drawn in code in `tools/art.py`, plus a 2×
 PNG.

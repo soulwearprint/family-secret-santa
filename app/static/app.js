@@ -120,7 +120,7 @@ function renderLogin() {
 }
 
 /* ── Main shell ────────────────────────────────────────────────────────── */
-const TABS = { years: "🎁 Years & draw", design: "🎨 Card design", family: "👪 Family", admins: "🔑 Admins", log: "📜 Log" };
+const TABS = { years: "🎁 Draws", design: "🎨 Card design", family: "👪 Family", admins: "🔑 Admins", log: "📜 Log" };
 
 function renderMain() {
   const modeBanner = state.status.mail_mode === "outbox"
@@ -150,7 +150,7 @@ function memberBody(form) {
   return b;
 }
 async function viewFamily() {
-  const [members, exclusions] = await Promise.all([api("/api/members"), api("/api/exclusions")]);
+  const [members, exclusions, groups] = await Promise.all([api("/api/members"), api("/api/exclusions"), api("/api/groups")]);
   const active = members.filter((m) => !m.archived), archived = members.filter((m) => m.archived);
   const rowHtml = (m) => `<tr>
       <td>${esc(m.name)}</td><td>${m.email ? esc(m.email)
@@ -191,6 +191,38 @@ async function viewFamily() {
           || `<tr><td class="muted">No rules yet.</td></tr>`}
       </tbody></table>
     </section>`;
+  // ── groups ──
+  const nameOf = (id) => members.find((m) => m.id === id)?.name || "?";
+  $("#view").insertAdjacentHTML("beforeend", `<section class="card">
+      <h2>👥 Groups</h2>
+      <p class="hint">Named lists of people you can start a draw from (e.g. “Family circle”, “Cousins”). Anyone can be in any number of groups.</p>
+      <table><tbody>${groups.map((g) => `<tr><td><b>${esc(g.name)}</b> <span class="muted">(${g.member_ids.length})</span><br>
+        <span class="hint">${g.member_ids.map((i) => esc(nameOf(i))).join(", ") || "empty"}</span></td>
+        <td style="text-align:right;white-space:nowrap"><button class="small secondary" data-gedit="${g.id}">Edit</button>
+        <button class="small secondary" data-gdel="${g.id}">Delete</button></td></tr>`).join("")
+        || `<tr><td class="muted">No groups yet.</td></tr>`}</tbody></table>
+      <div class="actions"><button class="secondary" id="gnew">＋ New group</button></div>
+    </section>`);
+  const groupDialog = async (g) => {
+    const r = await dialog(`<h2>${g ? "Edit group" : "New group"}</h2>
+      <label>Name</label><input name="gname" value="${esc(g?.name || "")}" maxlength="60" required>
+      <label>Members</label><div class="checks">${active.map((m) => `<label><input type="checkbox" name="gm" value="${m.id}"
+        ${g?.member_ids.includes(m.id) ? "checked" : ""}> ${esc(m.name)}</label>`).join("")}</div>`,
+      [{ label: "Cancel", value: "", cls: "secondary", formnovalidate: true }, { label: "Save", value: "save" }]);
+    if (r.action !== "save") return;
+    const body = { name: r.form.elements.gname.value, member_ids: [...r.form.querySelectorAll("input[name=gm]:checked")].map((i) => +i.value) };
+    try { await api(g ? `/api/groups/${g.id}` : "/api/groups", { method: g ? "PUT" : "POST", body }); }
+    catch (err) { await alertBox(`<p class="err">${esc(err.message)}</p>`); }
+    viewFamily();
+  };
+  $("#gnew").onclick = () => groupDialog(null);
+  document.querySelectorAll("[data-gedit]").forEach((b) => (b.onclick = () => groupDialog(groups.find((g) => g.id === +b.dataset.gedit))));
+  document.querySelectorAll("[data-gdel]").forEach((b) => (b.onclick = async () => {
+    const g = groups.find((x) => x.id === +b.dataset.gdel);
+    const r = await dialog(`<h2>Delete group “${esc(g.name)}”?</h2><p>Draws already created from it keep their people.</p>`,
+      [{ label: "Cancel", value: "", cls: "secondary" }, { label: "Delete", value: "del" }]);
+    if (r.action === "del") { await api(`/api/groups/${g.id}`, { method: "DELETE" }); viewFamily(); }
+  }));
   $("#excl").onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -302,38 +334,71 @@ async function viewLog() {
 
 /* ── Years ─────────────────────────────────────────────────────────────── */
 async function viewYears() {
-  const years = await api("/api/years");
+  const [years, groups] = await Promise.all([api("/api/years"), api("/api/groups")]);
   const thisYear = new Date().getFullYear();
   if (!state.year || !years.some((y) => y.year === state.year)) state.year = years[0]?.year ?? null;
   $("#view").innerHTML = `
     <section class="card">
       <div class="row">
-        <div><label>Year</label>
+        <div><label>Draw</label>
           <select id="ysel">${years.map((y) => `<option value="${y.year}" ${y.year === state.year ? "selected" : ""}>
-            ${y.year} — ${y.participants} people${y.drawn ? (y.in_sync ? " · drawn" : " · ⚠ list changed") : ""}</option>`).join("")
-            || "<option>No years yet</option>"}</select></div>
-        <form id="newy" class="row" style="flex:2 1 260px">
-          <div><label>Start a new year (copies the last year's list)</label>
-            <input name="year" type="number" min="2000" max="2200" value="${years.some((y) => y.year === thisYear) ? thisYear + 1 : thisYear}"></div>
-          <button class="secondary">Create</button>
-        </form>
+            ${esc(y.label)} — ${y.participants} people${y.drawn ? (y.in_sync ? " · drawn" : " · ⚠ list changed") : ""}</option>`).join("")
+            || "<option>No draws yet</option>"}</select></div>
+        <div style="flex:0 0 auto"><button class="secondary" id="newdraw">＋ New draw</button></div>
       </div>
+      <p class="hint">Run as many draws side by side as you like, e.g. a small family circle, everyone, and a random few.
+        Each has its own people, budget, design and postcards; someone in two draws gets two cards.</p>
       <div class="err" id="err"></div>
     </section>
     <div id="year"></div>`;
   $("#ysel").onchange = (e) => { state.year = +e.target.value; renderYear(); };
-  $("#newy").onsubmit = async (e) => {
-    e.preventDefault();
-    const year = +new FormData(e.target).get("year");
-    try { await api("/api/years", { method: "POST", body: { year } }); state.year = year; viewYears(); }
+  $("#newdraw").onclick = async () => {
+    const r = await dialog(`<h2>New draw</h2>
+      <div class="row">
+        <div><label>Year</label><input name="cal_year" type="number" min="2000" max="2200" value="${thisYear}" required></div>
+        <div style="flex:2 1 200px"><label>Name (e.g. Family circle, Everyone)</label><input name="name" maxlength="60"
+          placeholder="leave empty for the main draw"></div>
+      </div>
+      <label>Who takes part</label>
+      <select name="source" id="nsrc">
+        <option value="previous">Same people as last year's draw with this name</option>
+        <option value="everyone">Everyone in the family list</option>
+        ${groups.length ? `<option value="group">A group…</option>` : ""}
+        <option value="random">A random set of people…</option>
+        <option value="none">Nobody yet (I'll tick them)</option>
+      </select>
+      <div class="row" id="nextra" hidden>
+        <div id="ngroupw"><label>Group</label><select name="group_id">
+          <option value="" data-any>Everyone</option>${groups.map((g) => `<option value="${g.id}">${esc(g.name)} (${g.member_ids.length})</option>`).join("")}</select></div>
+        <div id="ncountw"><label>How many people</label><input name="count" type="number" min="2" value="5"></div>
+      </div>
+      <p class="hint">Budget, rules and card design start from last year's draw with the same name. You can change the list afterwards.</p>`,
+      [{ label: "Cancel", value: "", cls: "secondary", formnovalidate: true }, { label: "Create draw", value: "go" }]);
+    // (the dialog is already closed here; the listeners below are set before it closes)
+    if (r.action !== "go") return;
+    const f = r.form.elements;
+    const body = { cal_year: +f.cal_year.value, name: f.name.value, source: f.source.value,
+      group_id: f.group_id.value ? +f.group_id.value : null, count: +f.count.value || 0 };
+    try { const res = await api("/api/draws", { method: "POST", body }); state.year = res.year; viewYears(); }
     catch (err) { $("#err").textContent = err.message; }
   };
   if (state.year) renderYear();
 }
 
+// show/hide the group + count fields of the "New draw" dialog
+document.addEventListener("change", (e) => {
+  if (e.target.id !== "nsrc") return;
+  const v = e.target.value;
+  $("#nextra").hidden = !(v === "group" || v === "random");
+  $("#ncountw").hidden = v !== "random";
+  const any = document.querySelector("#ngroupw [data-any]");
+  if (any) any.hidden = v === "group";
+  if (v === "group" && any && any.selected) any.nextElementSibling && (any.nextElementSibling.selected = true);
+});
+
 async function renderYear() {
-  const [y, members, digest, fixed] = await Promise.all([api(`/api/years/${state.year}`), api("/api/members"),
-    api("/api/digest"), api(`/api/years/${state.year}/fixed`)]);
+  const [y, members, digest, fixed, groups] = await Promise.all([api(`/api/years/${state.year}`), api("/api/members"),
+    api("/api/digest"), api(`/api/years/${state.year}/fixed`), api("/api/groups")]);
   const inYear = new Set(y.participants.map((p) => p.id));
   const choosable = members.filter((m) => !m.archived || inYear.has(m.id));
   const pending = y.participants.filter((p) => p.has_match && !p.notified_at).length;
@@ -368,12 +433,12 @@ async function renderYear() {
 
   $("#year").innerHTML = `
     <section class="card">
-      <h2>Christmas ${y.year}</h2>
+      <h2>🎄 ${esc(y.label)}</h2>
       ${statusHtml}
     </section>
 
     <section class="card">
-      <h2>📌 Fixed pairs for ${y.year}</h2>
+      <h2>📌 Fixed pairs</h2>
       <p class="hint">Set by hand before the random draw, e.g. Grandma gives to little Peti. Everyone else is drawn randomly.
         Fixed pairs are visible to all admins and win over every other rule. Adding one after the draw applies at the next reshuffle.</p>
       <form id="fixed" class="row">
@@ -388,12 +453,26 @@ async function renderYear() {
     </section>
 
     <section class="card">
-      <h2>Who takes part in ${y.year}?</h2>
+      <h2>Who takes part?</h2>
+      ${groups.length ? `<div class="row" style="margin-bottom:10px"><div><label>Quick add a group</label>
+        <select id="addgroup"><option value="">— choose —</option>${groups.map((g) => `<option value="${g.id}">${esc(g.name)}</option>`).join("")}</select></div>
+        <div style="flex:0 0 auto"><button class="small secondary" type="button" id="addgroupbtn">Tick its members</button></div></div>` : ""}
       <form id="parts">
         <div class="checks">${choosable.map((m) => `<label><input type="checkbox" name="m" value="${m.id}" ${inYear.has(m.id) ? "checked" : ""}>
           ${esc(m.name)}</label>`).join("") || `<span class="muted">Add family members in the Family tab first.</span>`}</div>
         <div class="actions"><button class="secondary">Save participant list</button></div>
       </form>
+    </section>
+
+    <section class="card">
+      <h2>🎁 Gift ideas</h2>
+      <p class="hint">You can edit anyone's ideas, e.g. for small children or grandparents. The same rules apply as on their
+        own page: ideas not yet sent to their Secret Santa can be removed; sent ones can only be marked “no longer wanted”.
+        Changes go into the daily digest.</p>
+      <div class="checks">${y.participants.map((p) => `<label style="justify-content:space-between">
+        <span>${esc(p.name)} <span class="muted">${p.wishes ? `· 🎁 ${p.wishes}` : ""}</span></span>
+        <button type="button" class="small secondary" data-wedit="${p.id}">✏️ Edit</button></label>`).join("")
+        || `<span class="muted">Nobody in this draw yet.</span>`}</div>
     </section>
 
     ${y.drawn ? `<section class="card">
@@ -419,6 +498,8 @@ async function renderYear() {
     <section class="card">
       <h2>Details on the postcard</h2>
       <form id="details">
+        <label>Draw name (shown on the cards; empty for the main draw)</label>
+        <input name="name" value="${esc(y.name)}" maxlength="60">
         <div class="row">
           <div><label>Gift budget</label><input name="budget" value="${esc(y.budget)}" placeholder="e.g. €30"></div>
           <div><label>Gift exchange</label><input name="exchange_date" value="${esc(y.exchange_date)}" placeholder="e.g. 24 Dec, at Grandma's"></div>
@@ -426,20 +507,32 @@ async function renderYear() {
         <label>Extra note from Santa (optional, shown as written)</label><textarea name="note" rows="2" maxlength="600">${esc(y.note)}</textarea>
         <label style="display:flex;gap:8px;align-items:center;color:inherit;margin-top:10px">
           <input type="checkbox" name="avoid_repeat" style="width:auto" ${y.avoid_repeat ? "checked" : ""}>
-          Nobody draws the same person as in the previous year's draw</label>
+          Nobody draws the same person as in last year's “${esc(y.name || "main")}” draw</label>
+        <label style="display:flex;gap:8px;align-items:center;color:inherit;margin-top:6px">
+          <input type="checkbox" name="avoid_parallel" style="width:auto" ${y.avoid_parallel ? "checked" : ""}>
+          Nobody draws the same person as in another ${y.cal_year} draw</label>
         <p class="hint">Rules apply to the next draw or reshuffle. "Never draw each other" pairs are in the Family tab.</p>
         <div class="actions"><button class="secondary">Save details</button><span id="dmsg" class="hint"></span></div>
       </form>
-      <p class="hint" style="margin-top:14px"><button class="small secondary" id="dely">Delete ${y.year}</button></p>
+      <p class="hint" style="margin-top:14px"><button class="small secondary" id="dely">Delete this draw</button></p>
     </section>`;
 
   $("#details").onsubmit = async (e) => {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.target));
     body.avoid_repeat = e.target.elements.avoid_repeat.checked;
-    await api(`/api/years/${y.year}`, { method: "PUT", body });
+    body.avoid_parallel = e.target.elements.avoid_parallel.checked;
+    try { await api(`/api/years/${y.year}`, { method: "PUT", body }); }
+    catch (err) { $("#dmsg").textContent = err.message; return; }
     $("#dmsg").textContent = "Saved.";
+    if (body.name !== y.name) viewYears();
   };
+  if ($("#addgroupbtn")) $("#addgroupbtn").onclick = () => {
+    const g = groups.find((x) => x.id === +$("#addgroup").value);
+    if (!g) return;
+    document.querySelectorAll("#parts input[name=m]").forEach((i) => { if (g.member_ids.includes(+i.value)) i.checked = true; });
+  };
+  document.querySelectorAll("[data-wedit]").forEach((b) => (b.onclick = () => wishEditor(y, +b.dataset.wedit)));
   $("#parts").onsubmit = async (e) => {
     e.preventDefault();
     const ids = [...e.target.querySelectorAll("input[name=m]:checked")].map((i) => +i.value);
@@ -448,12 +541,12 @@ async function renderYear() {
     if (res.needs_reshuffle) await reshuffleDialog();
   };
   $("#dely").onclick = async () => {
-    const r = await dialog(`<h2>Delete ${y.year}?</h2><p>This removes the participant list and all matches for ${y.year}. It cannot be undone.</p>`,
+    const r = await dialog(`<h2>Delete ${esc(y.label)}?</h2><p>This removes its participant list, matches and gift ideas. It cannot be undone.</p>`,
       [{ label: "Cancel", value: "", cls: "secondary" }, { label: "Delete", value: "del" }]);
     if (r.action === "del") { await api(`/api/years/${y.year}`, { method: "DELETE" }); state.year = null; viewYears(); }
   };
   if ($("#draw")) $("#draw").onclick = async () => {
-    const r = await dialog(`<h2>Draw names for ${y.year}?</h2><p>Everyone in the list (${y.participants.length} people) gets exactly one
+    const r = await dialog(`<h2>Draw names for ${esc(y.label)}?</h2><p>Everyone in the list (${y.participants.length} people) gets exactly one
       giftee, never themselves. Nobody — including you — will see the result.</p>`,
       [{ label: "Cancel", value: "", cls: "secondary" }, { label: "🎲 Draw", value: "go" }]);
     if (r.action !== "go") return;
@@ -594,8 +687,8 @@ async function viewDesign() {
   $("#view").innerHTML = `
     <section class="card">
       <div class="row">
-        <div><label>Design for year</label>
-          <select id="dyear">${years.map((x) => `<option value="${x.year}" ${x.year === state.year ? "selected" : ""}>${x.year}</option>`).join("")}</select></div>
+        <div><label>Design for draw</label>
+          <select id="dyear">${years.map((x) => `<option value="${x.year}" ${x.year === state.year ? "selected" : ""}>${esc(x.label)}</option>`).join("")}</select></div>
         <div class="actions" style="flex:2 1 300px;justify-content:flex-end;margin:0">
           <button class="secondary" id="dsurprise">🎲 Surprise me</button>
           <button class="secondary" id="dreset">↺ Undo changes</button>
@@ -700,4 +793,66 @@ function schedulePreview(delay = 250) {
     frame.removeAttribute("src");
     frame.srcdoc = html;
   }, delay);
+}
+
+
+/* ── Admin: edit someone's gift ideas ──────────────────────────────────── */
+const REASON_LABEL = { got_it: "already got it / has a similar one", not_wanted: "doesn't want it any more",
+  mistake: "added by mistake", other: "no longer wanted" };
+
+async function wishEditor(y, memberId) {
+  const all = await api(`/api/years/${y.year}/wishes`);
+  let person = all.find((p) => p.id === memberId);
+  const base = `/api/years/${y.year}/wishes/${memberId}`;
+  const sources = await api(`${base}/copy-sources`);
+  const body = () => `<h2>🎁 Gift ideas — ${esc(person.name)}</h2>
+    <p class="hint">${esc(y.label)}${y.budget ? ` · budget ${esc(y.budget)}` : ""}</p>
+    <ul class="mine">${person.wishes.map((w) => `<li style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)">
+      <div>${w.obsolete ? `<s>${esc(w.text)}</s> <span class="pill">${esc(REASON_LABEL[w.reason] || "no longer wanted")}</span>`
+        : esc(w.text)}${w.url ? ` <a href="${esc(w.url)}" target="_blank" rel="noopener noreferrer">link ↗</a>` : ""}
+        <div class="hint">${w.sent ? "📬 their Secret Santa has it" : "not sent yet"}</div></div>
+      <div style="white-space:nowrap">${w.obsolete ? `<button type="button" class="small secondary" data-act="restore" data-id="${esc(w.id)}">Restore</button>`
+        : w.sent ? `<select data-why="${esc(w.id)}" style="width:auto;font-size:12px;padding:2px">
+            ${Object.entries(REASON_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+            <button type="button" class="small secondary" data-act="obsolete" data-id="${esc(w.id)}">Mark</button>`
+        : `<button type="button" class="small secondary" data-act="remove" data-id="${esc(w.id)}">Remove</button>`}</div></li>`).join("")
+      || `<li class="muted" style="list-style:none">No ideas yet.</li>`}</ul>
+    <div class="row" style="margin-top:10px">
+      <div><label>New idea</label><input id="wtext" maxlength="200"></div>
+      <div><label>Link (optional)</label><input id="wurl" maxlength="500"></div>
+      <div style="flex:0 0 auto"><button type="button" class="small" data-act="add">Add</button></div>
+    </div>
+    ${sources.length ? `<div class="row" style="margin-top:6px">
+      <div><label>📋 Copy their ideas from another draw</label><select id="wcopy">${sources.map((x) =>
+        `<option value="${x.draw}">${esc(x.label)} (${x.count})</option>`).join("")}</select></div>
+      <div style="flex:0 0 auto"><button type="button" class="small secondary" data-act="copy">Copy</button></div></div>` : ""}
+    <p class="err" id="werr"></p>`;
+  const dlg = $("#dlg");
+  const refresh = () => { $("#dlg-body").innerHTML = body(); };
+  $("#dlg-body").onclick = async (e) => {
+    const b = e.target.closest("button[data-act]");
+    if (!b) return;
+    e.preventDefault();
+    try {
+      let res;
+      if (b.dataset.act === "copy") {
+        res = await api(`${base}/copy`, { method: "POST", body: { draw: +$("#wcopy").value } });
+      } else if (b.dataset.act === "add") {
+        const text = $("#wtext").value.trim();
+        if (!text) return;
+        res = await api(base, { method: "POST", body: { text, url: $("#wurl").value.trim() } });
+      } else if (b.dataset.act === "remove") {
+        res = await api(`${base}/${encodeURIComponent(b.dataset.id)}`, { method: "DELETE" });
+      } else {
+        const reason = b.dataset.act === "obsolete" ? document.querySelector(`[data-why="${b.dataset.id}"]`).value : "";
+        res = await api(`${base}/${encodeURIComponent(b.dataset.id)}/obsolete`, { method: "POST",
+          body: { obsolete: b.dataset.act === "obsolete", reason } });
+      }
+      person = { ...person, wishes: res.wishes };
+      refresh();
+    } catch (err) { $("#werr").textContent = err.message; }
+  };
+  await dialog(body(), [{ label: "Done", value: "ok" }]);
+  $("#dlg-body").onclick = null;
+  renderYear();
 }

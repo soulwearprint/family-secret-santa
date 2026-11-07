@@ -6,13 +6,14 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
@@ -155,7 +156,23 @@ class YearDetailsIn(BaseModel):
     budget: str = Field(default="", max_length=80)
     exchange_date: str = Field(default="", max_length=80)
     note: str = Field(default="", max_length=600)
-    avoid_repeat: bool = True  # nobody draws the same person as last year
+    avoid_repeat: bool = True  # nobody draws the same person as in last year's draw of the same name
+    avoid_parallel: bool = True  # nobody draws the same person as in another draw this year
+    name: Optional[str] = Field(default=None, max_length=60)  # None = keep
+
+
+class DrawIn(BaseModel):
+    """A new draw: a calendar year + a name ("Family circle"), with people from a source."""
+    cal_year: int = Field(ge=2000, le=2200)
+    name: str = Field(default="", max_length=60)
+    source: Literal["previous", "everyone", "group", "random", "none"] = "previous"
+    group_id: Optional[int] = None   # for "group" and "random" (random: None = everyone)
+    count: int = Field(default=0, ge=0, le=500)  # for "random"
+
+
+class GroupIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    member_ids: List[int] = []
 
 
 class ParticipantsIn(BaseModel):
@@ -554,11 +571,16 @@ def _forbidden(conn, key: bytes, year: int) -> draw.Forbidden:
     # postcard and would otherwise learn who their own Secret Santa is.
     for r in conn.execute("SELECT id, helper_id FROM members WHERE email = '' AND helper_id IS NOT NULL"):
         out.setdefault(r["id"], set()).add(r["helper_id"])
-    y = conn.execute("SELECT avoid_repeat FROM years WHERE year = ?", (year,)).fetchone()
+    y = conn.execute("SELECT * FROM years WHERE year = ?", (year,)).fetchone()
     if y and y["avoid_repeat"]:
-        prev = conn.execute("SELECT MAX(year) FROM pairings WHERE year < ?", (year,)).fetchone()[0]
+        prev = _previous_draw(conn, y, drawn_only=True)
         if prev is not None:
-            for g, r in _load_pairing(conn, key, prev).items():
+            for g, r in _load_pairing(conn, key, prev["year"]).items():
+                out.setdefault(g, set()).add(r)
+    if y and y["avoid_parallel"]:  # e.g. not Anna→Bela in both the family circle and the big draw
+        for other in conn.execute("SELECT DISTINCT p.year FROM pairings p JOIN years y ON y.year = p.year "
+                                  "WHERE y.cal_year = ? AND p.year != ?", (y["cal_year"], year)).fetchall():
+            for g, r in _load_pairing(conn, key, other[0]).items():
                 out.setdefault(g, set()).add(r)
     # Fixed pairs win over every other rule: the giver may only draw their fixed
     # receiver, and nobody else may draw that receiver.
@@ -615,8 +637,25 @@ def delete_fixed(year: int, giver_id: int, s: Session = Depends(current)):
 def _year_or_404(conn, year: int):
     row = conn.execute("SELECT * FROM years WHERE year = ?", (year,)).fetchone()
     if not row:
-        raise HTTPException(404, f"No Secret Santa set up for {year}.")
+        raise HTTPException(404, "No such draw.")
     return row
+
+
+def _cal(y) -> int:
+    """Calendar year of a draw row (shown on cards)."""
+    return y["cal_year"] or y["year"]
+
+
+def _label(y) -> str:
+    return f"{_cal(y)} · {y['name']}" if y["name"] else str(_cal(y))
+
+
+def _previous_draw(conn, y, drawn_only: bool = False):
+    """The same-named draw from the most recent earlier calendar year (its 'series')."""
+    q = ("SELECT * FROM years WHERE name = ? COLLATE NOCASE AND cal_year < ? "
+         + ("AND year IN (SELECT DISTINCT year FROM pairings) " if drawn_only else "")
+         + "ORDER BY cal_year DESC LIMIT 1")
+    return conn.execute(q, (y["name"], _cal(y))).fetchone()
 
 
 def _state(conn, year: int) -> dict:
@@ -644,34 +683,75 @@ def _names(conn, ids) -> dict[int, str]:
 def list_years(s: Session = Depends(current)):
     out = []
     with db.connect() as conn:
-        for r in conn.execute("SELECT year FROM years ORDER BY year DESC").fetchall():
+        for r in conn.execute("SELECT * FROM years ORDER BY cal_year DESC, name COLLATE NOCASE").fetchall():
             st = _state(conn, r["year"])
-            out.append({"year": r["year"], "participants": len(st["participants"]),
-                        "drawn": st["drawn"], "in_sync": st["in_sync"]})
+            out.append({"year": r["year"], "cal_year": _cal(r), "name": r["name"], "label": _label(r),
+                        "participants": len(st["participants"]), "drawn": st["drawn"], "in_sync": st["in_sync"]})
     return out
+
+
+def _create_draw(conn, s: Session, cal_year: int, name: str, source: str, group_id=None, count: int = 0) -> int:
+    name = name.strip()
+    if conn.execute("SELECT 1 FROM years WHERE cal_year = ? AND name = ? COLLATE NOCASE", (cal_year, name)).fetchone():
+        raise HTTPException(409, f"There is already a draw called “{name or cal_year}” in {cal_year}.")
+    # Draws from before named draws use id == calendar year; keep that for unnamed
+    # draws when free, otherwise take ids well above any calendar year.
+    taken = conn.execute("SELECT 1 FROM years WHERE year = ?", (cal_year,)).fetchone()
+    draw_id = cal_year if not name and not taken else max(
+        conn.execute("SELECT COALESCE(MAX(year), 0) FROM years").fetchone()[0], 100000) + 1
+    probe = {"name": name, "cal_year": cal_year, "year": draw_id}
+    prev = _previous_draw(conn, probe) or conn.execute(
+        "SELECT * FROM years WHERE cal_year < ? ORDER BY cal_year DESC LIMIT 1", (cal_year,)).fetchone()
+    conn.execute(
+        "INSERT INTO years (year, cal_year, name, budget, exchange_date, note, avoid_repeat, avoid_parallel, theme, created_at) "
+        "VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?)",
+        (draw_id, cal_year, name, prev["budget"] if prev else "", prev["note"] if prev else "",
+         prev["avoid_repeat"] if prev else 1, prev["avoid_parallel"] if prev else 1, prev["theme"] if prev else "", db.now()),
+    )
+    active = "SELECT id FROM members WHERE archived = 0"
+    if source == "previous":
+        same = _previous_draw(conn, probe)
+        if same is None and not name:
+            same = prev
+        if same is not None:
+            ids = [r[0] for r in conn.execute(
+                "SELECT yp.member_id FROM year_participants yp JOIN members m ON m.id = yp.member_id "
+                "WHERE yp.year = ? AND m.archived = 0", (same["year"],))]
+        else:
+            ids = [r[0] for r in conn.execute(active)]
+    elif source == "everyone":
+        ids = [r[0] for r in conn.execute(active)]
+    elif source in ("group", "random"):
+        if source == "group" or group_id:
+            if not conn.execute("SELECT 1 FROM groups WHERE id = ?", (group_id,)).fetchone():
+                raise HTTPException(404, "No such group.")
+            ids = [r[0] for r in conn.execute(
+                "SELECT gm.member_id FROM group_members gm JOIN members m ON m.id = gm.member_id "
+                "WHERE gm.group_id = ? AND m.archived = 0", (group_id,))]
+        else:
+            ids = [r[0] for r in conn.execute(active)]
+        if source == "random":
+            if count < 2 or count > len(ids):
+                raise HTTPException(422, f"Pick between 2 and {len(ids)} people for a random draw.")
+            ids = random.SystemRandom().sample(sorted(ids), count)
+    else:
+        ids = []
+    conn.executemany("INSERT INTO year_participants (year, member_id) VALUES (?, ?)", [(draw_id, i) for i in ids])
+    db.audit(conn, s.admin_name, "draw created", f"{_label(probe)}: {len(ids)} people ({source})")
+    return draw_id
 
 
 @app.post("/api/years")
 def create_year(body: YearIn, s: Session = Depends(current)):
+    """Unnamed draw for a calendar year (starts from the previous year's list)."""
     with db.connect() as conn:
-        if conn.execute("SELECT 1 FROM years WHERE year = ?", (body.year,)).fetchone():
-            raise HTTPException(409, f"{body.year} already exists.")
-        prev = conn.execute("SELECT * FROM years WHERE year < ? ORDER BY year DESC LIMIT 1", (body.year,)).fetchone()
-        conn.execute(
-            "INSERT INTO years (year, budget, exchange_date, note, avoid_repeat, theme, created_at) VALUES (?, ?, '', ?, ?, ?, ?)",
-            (body.year, prev["budget"] if prev else "", prev["note"] if prev else "",
-             prev["avoid_repeat"] if prev else 1, prev["theme"] if prev else "", db.now()),
-        )
-        if prev:  # start from last year's list, minus archived members
-            conn.execute(
-                "INSERT INTO year_participants (year, member_id) SELECT ?, yp.member_id FROM year_participants yp "
-                "JOIN members m ON m.id = yp.member_id WHERE yp.year = ? AND m.archived = 0",
-                (body.year, prev["year"]),
-            )
-        else:
-            conn.execute("INSERT INTO year_participants (year, member_id) SELECT ?, id FROM members WHERE archived = 0", (body.year,))
-        db.audit(conn, s.admin_name, "year created", str(body.year))
-    return {"ok": True}
+        return {"year": _create_draw(conn, s, body.year, "", "previous")}
+
+
+@app.post("/api/draws")
+def create_draw(body: DrawIn, s: Session = Depends(current)):
+    with db.connect() as conn:
+        return {"year": _create_draw(conn, s, body.cal_year, body.name, body.source, body.group_id, body.count)}
 
 
 @app.get("/api/years/{year}")
@@ -693,9 +773,9 @@ def get_year(year: int, s: Session = Depends(current)):
         for mid in sorted(st["participants"], key=lambda i: names.get(i, "").lower())
     ]
     return {
-        "year": year,
+        "year": year, "cal_year": _cal(y), "name": y["name"], "label": _label(y),
         "budget": y["budget"], "exchange_date": y["exchange_date"], "note": y["note"],
-        "avoid_repeat": bool(y["avoid_repeat"]),
+        "avoid_repeat": bool(y["avoid_repeat"]), "avoid_parallel": bool(y["avoid_parallel"]),
         "theme": _theme_of(y),
         "participants": people,
         "drawn": st["drawn"],
@@ -708,10 +788,16 @@ def get_year(year: int, s: Session = Depends(current)):
 @app.put("/api/years/{year}")
 def edit_year(year: int, body: YearDetailsIn, s: Session = Depends(current)):
     with db.connect() as conn:
-        _year_or_404(conn, year)
-        conn.execute("UPDATE years SET budget = ?, exchange_date = ?, note = ?, avoid_repeat = ? WHERE year = ?",
-                     (body.budget.strip(), body.exchange_date.strip(), body.note.strip(), int(body.avoid_repeat), year))
-        db.audit(conn, s.admin_name, "year details edited", str(year))
+        y = _year_or_404(conn, year)
+        name = y["name"] if body.name is None else body.name.strip()
+        if name.lower() != y["name"].lower() and conn.execute(
+                "SELECT 1 FROM years WHERE cal_year = ? AND name = ? COLLATE NOCASE AND year != ?",
+                (_cal(y), name, year)).fetchone():
+            raise HTTPException(409, f"There is already a draw called “{name or _cal(y)}” in {_cal(y)}.")
+        conn.execute("UPDATE years SET budget = ?, exchange_date = ?, note = ?, avoid_repeat = ?, avoid_parallel = ?, name = ? "
+                     "WHERE year = ?", (body.budget.strip(), body.exchange_date.strip(), body.note.strip(),
+                                        int(body.avoid_repeat), int(body.avoid_parallel), name, year))
+        db.audit(conn, s.admin_name, "draw details edited", _label({**dict(y), "name": name}))
     return {"ok": True}
 
 
@@ -719,8 +805,9 @@ def edit_year(year: int, body: YearDetailsIn, s: Session = Depends(current)):
 def delete_year(year: int, s: Session = Depends(current)):
     with db.connect() as conn:
         _year_or_404(conn, year)
+        label = _label(_year_or_404(conn, year))
         conn.execute("DELETE FROM years WHERE year = ?", (year,))
-        db.audit(conn, s.admin_name, "year deleted", str(year))
+        db.audit(conn, s.admin_name, "draw deleted", label)
     return {"ok": True}
 
 
@@ -833,9 +920,10 @@ def invite(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
             token = crypto.new_link_token()
             try:
                 name, to, helper = _recipient(conn, mid)
-                mailer.deliver(mailer.build_invite(name, to, m["lang"] or mailer.DEFAULT_LANG, year,
+                mailer.deliver(mailer.build_invite(name, to, m["lang"] or mailer.DEFAULT_LANG, _cal(y),
                                                    y["budget"], f"{base}/p/{token}", helper,
-                                                   theme=_theme_of(y), asset_base=_asset_base(request)),
+                                                   theme=_theme_of(y), asset_base=_asset_base(request),
+                                                   draw_name=y["name"]),
                                to, f"{year}_invite", for_name=name if helper else "")
             except Exception as exc:
                 results.append({"id": mid, "name": m["name"], "ok": False, "error": type(exc).__name__ + ": " + str(exc)[:200]})
@@ -877,7 +965,8 @@ def notify(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
                 results.append({"id": r["giver_id"], "name": r["name"], "ok": False, "error": exc.detail})
                 continue
             letter = mailer.Letter(
-                giver_name=r["name"], giver_email=to_email, receiver_name=names[receiver], year=year, helper_name=helper,
+                giver_name=r["name"], giver_email=to_email, receiver_name=names[receiver], year=_cal(y), helper_name=helper,
+                draw_name=y["name"],
                 budget=y["budget"], exchange_date=y["exchange_date"], note=y["note"],
                 updated=r["notify_count"] > 0, lang=r["lang"] or mailer.DEFAULT_LANG,
                 page_url=f"{base}/p/{token}", receiver_wishes=receiver_wishes,
@@ -1005,23 +1094,28 @@ def set_year_theme(year: int, body: ThemeIn, s: Session = Depends(current)):
 def theme_preview(body: ThemePreviewIn, request: Request, s: Session = Depends(current)):
     """Render any of the e-mails with sample names (never real data) in the given design."""
     hu = body.lang == "hu"
-    year = body.year or time.gmtime().tm_year
+    year, draw_name = time.gmtime().tm_year, ""
+    if body.year:
+        with db.connect() as conn:
+            y = _year_or_404(conn, body.year)
+            year, draw_name = _cal(y), y["name"]
     budget = "10 000 Ft" if hu else "€30"
     base = _asset_base(request)
     sample_wishes = ([{"text": "Puzzle, 1000 darabos", "url": ""}, {"text": "Meleg sál (zöld)", "url": ""}] if hu else
                      [{"text": "A 1000-piece puzzle", "url": ""}, {"text": "A warm green scarf", "url": ""}])
     if body.kind == "invite":
         msg = mailer.build_invite("Rudolf", "rudolf@example.com", body.lang, year, budget, f"{base}/p/demo",
-                                  theme=body.theme, asset_base=base)
+                                  theme=body.theme, asset_base=base, draw_name=draw_name)
     elif body.kind == "digest":
         msg = mailer.build_digest("Rudolf", "rudolf@example.com", body.lang, "Mikulásné" if hu else "Mrs. Claus",
                                   sample_wishes[1:], [{"text": "Bögre" if hu else "A mug", "reason": "got_it"}],
-                                  sample_wishes, budget, theme=body.theme, asset_base=base)
+                                  sample_wishes, budget, theme=body.theme, asset_base=base, draw_name=draw_name)
     else:
         return mailer.render_html(mailer.Letter(
             giver_name="Rudolf", giver_email="rudolf@example.com", receiver_name="Mikulásné" if hu else "Mrs. Claus",
             year=year, budget=budget, exchange_date="december 24., vacsora után" if hu else "24 December, after dinner",
             lang=body.lang, page_url=f"{base}/p/demo", receiver_wishes=sample_wishes, theme=body.theme, asset_base=base,
+            draw_name=draw_name,
         ))
     return msg.get_body(("html",)).get_content()
 
@@ -1201,11 +1295,15 @@ def _pending(items: list[dict]) -> tuple[list[dict], list[dict]]:
 
 
 def _queue_digest(conn, token: str, row) -> None:
-    """After a change, remember (encrypted) that this person's Secret Santa has news."""
-    year, member = row["year"], row["member_id"]
+    """After a change through the personal link: find the giver via the link's sealed route."""
     if not row["giver_route"] or not row["private_sealed"]:
         return
-    giver = crypto.open_with_link(token, row["private_sealed"], year, member, row["giver_route"])
+    giver = crypto.open_with_link(token, row["private_sealed"], row["year"], row["member_id"], row["giver_route"])
+    _queue_for(conn, row["year"], row["member_id"], giver)
+
+
+def _queue_for(conn, year: int, member: int, giver: int) -> None:
+    """Remember (encrypted with the server key) that this person's Secret Santa has news."""
     p = conn.execute("SELECT notified_at FROM pairings WHERE year = ? AND giver_id = ?", (year, giver)).fetchone()
     if not p or not p["notified_at"]:
         return  # their postcard isn't out yet; it will list the ideas itself
@@ -1239,7 +1337,8 @@ def run_digest() -> dict:
                 g_name, to, helper = _recipient(conn, giver)
                 mailer.deliver(mailer.build_digest(g_name, to, g["lang"] or mailer.DEFAULT_LANG, r_name,
                                                    new, gone, _active(items), y["budget"], helper,
-                                                   theme=_theme_of(y), asset_base=_asset_base(None)),
+                                                   theme=_theme_of(y), asset_base=_asset_base(None),
+                                                   draw_name=y["name"]),
                                to, f"{year}_ideas", for_name=g_name if helper else "")
             except Exception as exc:  # keep it queued; try again next run
                 failed += 1
@@ -1291,7 +1390,7 @@ def participant_page(token: str):
         y = _year_or_404(conn, row["year"])
         names = _names(conn, [receiver]) if receiver is not None else {}
         return {
-            "name": row["name"], "lang": row["lang"] or mailer.DEFAULT_LANG, "year": row["year"],
+            "name": row["name"], "lang": row["lang"] or mailer.DEFAULT_LANG, "year": _cal(y), "draw_name": y["name"],
             "budget": y["budget"], "exchange_date": y["exchange_date"],
             "my_wishes": _my_view(_items(conn, row["year"], row["member_id"])),
             "giftee": None if receiver is None else
@@ -1325,32 +1424,29 @@ def _find(items: list[dict], wish_id: str) -> dict:
     raise HTTPException(404, "No such idea.")
 
 
-@app.post("/api/p/{token}/wishes")
-def add_wish(token: str, body: WishIn):
+def _add_change(body: "WishIn"):
     def change(items):
         if len([i for i in items if not i["obsolete"]]) >= MAX_WISHES:
             raise HTTPException(422, f"At most {MAX_WISHES} ideas.")
         items.append({"id": secrets.token_hex(4), "text": body.text.strip(), "url": _clean_url(body.url),
                       "sent": False, "obsolete": False, "reason": "", "obsolete_sent": False})
-    return _mutate(token, change)
+    return change
 
 
-@app.delete("/api/p/{token}/wishes/{wish_id}")
-def remove_wish(token: str, wish_id: str):
+def _remove_change(wish_id: str):
     def change(items):
         item = _find(items, wish_id)
         if item["sent"]:
-            raise HTTPException(409, "Your Secret Santa has already received this idea. Mark it as no longer wanted instead.")
+            raise HTTPException(409, "The Secret Santa has already received this idea. Mark it as no longer wanted instead.")
         items.remove(item)
-    return _mutate(token, change)
+    return change
 
 
-@app.post("/api/p/{token}/wishes/{wish_id}/obsolete")
-def mark_obsolete(token: str, wish_id: str, body: ObsoleteIn):
+def _obsolete_change(wish_id: str, body: "ObsoleteIn"):
     def change(items):
         item = _find(items, wish_id)
         if not item["sent"]:
-            raise HTTPException(409, "Not sent to your Secret Santa yet, so you can simply remove it.")
+            raise HTTPException(409, "Not sent to the Secret Santa yet, so it can simply be removed.")
         if not body.obsolete and len([i for i in items if not i["obsolete"]]) >= MAX_WISHES:
             raise HTTPException(422, f"At most {MAX_WISHES} ideas.")
         if body.obsolete and not item["obsolete"]:
@@ -1358,7 +1454,193 @@ def mark_obsolete(token: str, wish_id: str, body: ObsoleteIn):
         elif not body.obsolete and item["obsolete"]:
             # wanted again: if the giver was already told it was obsolete, tell them it's back
             item.update(obsolete=False, reason="", sent=not item["obsolete_sent"], obsolete_sent=False)
-    return _mutate(token, change)
+    return change
+
+
+def _copy_sources(conn, year: int, member_id: int) -> list[dict]:
+    """Other draws in which this person has gift ideas that are still wanted."""
+    out = []
+    for r in conn.execute("SELECT w.year, w.items, y.* FROM wishes w JOIN years y ON y.year = w.year "
+                          "WHERE w.member_id = ? AND w.year != ? ORDER BY y.cal_year DESC, y.name COLLATE NOCASE",
+                          (member_id, year)).fetchall():
+        n = len([i for i in json.loads(r["items"]) if not i.get("obsolete")])
+        if n:
+            out.append({"draw": r["year"], "label": _label(r), "count": n})
+    return out
+
+
+def _copy_change(source: list[dict], result: dict):
+    """Append the source's wanted ideas that aren't on the list yet, up to the limit.
+    Copies start as 'not sent', so this draw's Secret Santa hears about them."""
+    def change(items):
+        have = {i["text"].strip().lower() for i in items if not i["obsolete"]}
+        room = MAX_WISHES - len(have)
+        for src in source:
+            if src["obsolete"] or src["text"].strip().lower() in have:
+                result["skipped"] += 1
+                continue
+            if room <= 0:
+                result["skipped"] += 1
+                continue
+            items.append({"id": secrets.token_hex(4), "text": src["text"], "url": src.get("url", ""),
+                          "sent": False, "obsolete": False, "reason": "", "obsolete_sent": False})
+            have.add(src["text"].strip().lower())
+            room -= 1
+            result["copied"] += 1
+    return change
+
+
+class CopyIn(BaseModel):
+    draw: int  # copy from this draw
+
+
+def _source_items(year: int, member_id: int, from_draw: int) -> list[dict]:
+    with db.connect() as conn:
+        if from_draw == year or not any(x["draw"] == from_draw for x in _copy_sources(conn, year, member_id)):
+            raise HTTPException(404, "Nothing to copy from that draw.")
+        return _items(conn, from_draw, member_id)
+
+
+@app.get("/api/p/{token}/copy-sources")
+def participant_copy_sources(token: str):
+    with db.connect() as conn:
+        row, _ = _link(conn, token)
+        return _copy_sources(conn, row["year"], row["member_id"])
+
+
+@app.post("/api/p/{token}/copy")
+def participant_copy(token: str, body: CopyIn):
+    with db.connect() as conn:
+        row, _ = _link(conn, token)
+    result = {"copied": 0, "skipped": 0}
+    out = _mutate(token, _copy_change(_source_items(row["year"], row["member_id"], body.draw), result))
+    return {**out, **result}
+
+
+@app.get("/api/years/{year}/wishes/{member_id}/copy-sources")
+def admin_copy_sources(year: int, member_id: int, s: Session = Depends(current)):
+    with db.connect() as conn:
+        _year_or_404(conn, year)
+        return _copy_sources(conn, year, member_id)
+
+
+@app.post("/api/years/{year}/wishes/{member_id}/copy")
+def admin_copy(year: int, member_id: int, body: CopyIn, s: Session = Depends(current)):
+    result = {"copied": 0, "skipped": 0}
+    out = _admin_mutate(s, year, member_id, _copy_change(_source_items(year, member_id, body.draw), result))
+    return {**out, **result}
+
+
+@app.post("/api/p/{token}/wishes")
+def add_wish(token: str, body: WishIn):
+    return _mutate(token, _add_change(body))
+
+
+@app.delete("/api/p/{token}/wishes/{wish_id}")
+def remove_wish(token: str, wish_id: str):
+    return _mutate(token, _remove_change(wish_id))
+
+
+@app.post("/api/p/{token}/wishes/{wish_id}/obsolete")
+def mark_obsolete(token: str, wish_id: str, body: ObsoleteIn):
+    return _mutate(token, _obsolete_change(wish_id, body))
+
+
+# ─── Admins editing gift ideas on someone's behalf ─────────────────────────
+# Same rules as the personal page. The admin's session key can read the draw,
+# so the giver for the digest is looked up directly (and never shown).
+
+def _admin_mutate(s: Session, year: int, member_id: int, change) -> dict:
+    with db.connect() as conn:
+        y = _year_or_404(conn, year)
+        if member_id not in _state(conn, year)["participants"]:
+            raise HTTPException(404, "Not a participant of this draw.")
+        items = _items(conn, year, member_id)
+        change(items)
+        _save_items(conn, year, member_id, items)
+        giver = {r: g for g, r in _load_pairing(conn, s.key, year).items()}.get(member_id)
+        if giver is not None:
+            _queue_for(conn, year, member_id, giver)
+        db.audit(conn, s.admin_name, "gift ideas edited by admin", f"{_label(y)}: {_names(conn, [member_id]).get(member_id, '?')}")
+        return {"wishes": _my_view(items)}
+
+
+@app.get("/api/years/{year}/wishes")
+def admin_list_wishes(year: int, s: Session = Depends(current)):
+    with db.connect() as conn:
+        _year_or_404(conn, year)
+        people = _state(conn, year)["participants"]
+        names = _names(conn, people)
+        return [{"id": m, "name": names.get(m, "?"), "wishes": _my_view(_items(conn, year, m))}
+                for m in sorted(people, key=lambda i: names.get(i, "").lower())]
+
+
+@app.post("/api/years/{year}/wishes/{member_id}")
+def admin_add_wish(year: int, member_id: int, body: WishIn, s: Session = Depends(current)):
+    return _admin_mutate(s, year, member_id, _add_change(body))
+
+
+@app.delete("/api/years/{year}/wishes/{member_id}/{wish_id}")
+def admin_remove_wish(year: int, member_id: int, wish_id: str, s: Session = Depends(current)):
+    return _admin_mutate(s, year, member_id, _remove_change(wish_id))
+
+
+@app.post("/api/years/{year}/wishes/{member_id}/{wish_id}/obsolete")
+def admin_obsolete_wish(year: int, member_id: int, wish_id: str, body: ObsoleteIn, s: Session = Depends(current)):
+    return _admin_mutate(s, year, member_id, _obsolete_change(wish_id, body))
+
+
+# ─── Groups (reusable lists of people; anyone can be in any number) ────────
+
+def _set_group_members(conn, gid: int, ids: list[int]) -> None:
+    known = {r[0] for r in conn.execute("SELECT id FROM members")}
+    if set(ids) - known:
+        raise HTTPException(422, "Unknown member id(s).")
+    conn.execute("DELETE FROM group_members WHERE group_id = ?", (gid,))
+    conn.executemany("INSERT INTO group_members (group_id, member_id) VALUES (?, ?)", [(gid, i) for i in set(ids)])
+
+
+@app.get("/api/groups")
+def list_groups(s: Session = Depends(current)):
+    with db.connect() as conn:
+        groups = conn.execute("SELECT id, name FROM groups ORDER BY name COLLATE NOCASE").fetchall()
+        return [{"id": g["id"], "name": g["name"], "member_ids": sorted(r[0] for r in conn.execute(
+            "SELECT member_id FROM group_members WHERE group_id = ?", (g["id"],)))} for g in groups]
+
+
+@app.post("/api/groups")
+def add_group(body: GroupIn, s: Session = Depends(current)):
+    with db.connect() as conn:
+        if conn.execute("SELECT 1 FROM groups WHERE name = ?", (body.name.strip(),)).fetchone():
+            raise HTTPException(409, "A group with this name already exists.")
+        gid = conn.execute("INSERT INTO groups (name, created_at) VALUES (?, ?)", (body.name.strip(), db.now())).lastrowid
+        _set_group_members(conn, gid, body.member_ids)
+        db.audit(conn, s.admin_name, "group created", f"{body.name.strip()}: {len(set(body.member_ids))} people")
+    return {"id": gid}
+
+
+@app.put("/api/groups/{gid}")
+def edit_group(gid: int, body: GroupIn, s: Session = Depends(current)):
+    with db.connect() as conn:
+        if not conn.execute("SELECT 1 FROM groups WHERE id = ?", (gid,)).fetchone():
+            raise HTTPException(404, "No such group.")
+        if conn.execute("SELECT 1 FROM groups WHERE name = ? AND id != ?", (body.name.strip(), gid)).fetchone():
+            raise HTTPException(409, "A group with this name already exists.")
+        conn.execute("UPDATE groups SET name = ? WHERE id = ?", (body.name.strip(), gid))
+        _set_group_members(conn, gid, body.member_ids)
+        db.audit(conn, s.admin_name, "group edited", f"{body.name.strip()}: {len(set(body.member_ids))} people")
+    return {"ok": True}
+
+
+@app.delete("/api/groups/{gid}")
+def delete_group(gid: int, s: Session = Depends(current)):
+    with db.connect() as conn:
+        row = conn.execute("SELECT name FROM groups WHERE id = ?", (gid,)).fetchone()
+        if not row:
+            raise HTTPException(404, "No such group.")
+        conn.execute("DELETE FROM groups WHERE id = ?", (gid,))
+        db.audit(conn, s.admin_name, "group deleted", row["name"])
+    return {"ok": True}
 
 
 @app.put("/api/p/{token}/lang")
@@ -1370,9 +1652,10 @@ def participant_lang(token: str, body: LangIn, request: Request):
         if body.resend and receiver is None:
             y = _year_or_404(conn, row["year"])
             name, to, helper = _recipient(conn, row["member_id"])
-            mailer.deliver(mailer.build_invite(name, to, body.lang, row["year"], y["budget"],
+            mailer.deliver(mailer.build_invite(name, to, body.lang, _cal(y), y["budget"],
                                                f"{_public_base(request)}/p/{token}", helper,
-                                               theme=_theme_of(y), asset_base=_asset_base(request)),
+                                               theme=_theme_of(y), asset_base=_asset_base(request),
+                                               draw_name=y["name"]),
                            to, f"{row['year']}_invite", for_name=name if helper else "")
         elif body.resend:
             y = _year_or_404(conn, row["year"])
@@ -1380,7 +1663,7 @@ def participant_lang(token: str, body: LangIn, request: Request):
             mailer.send(mailer.Letter(
                 giver_name=row["name"], giver_email=_recipient(conn, row["member_id"])[1],
                 helper_name=_recipient(conn, row["member_id"])[2], receiver_name=names.get(receiver, "?"),
-                year=row["year"], budget=y["budget"], exchange_date=y["exchange_date"], note=y["note"],
+                year=_cal(y), draw_name=y["name"], budget=y["budget"], exchange_date=y["exchange_date"], note=y["note"],
                 lang=body.lang, page_url=f"{_public_base(request)}/p/{token}",
                 receiver_wishes=_active(_items(conn, row["year"], receiver)),
                 theme=_theme_of(y), asset_base=_asset_base(request),

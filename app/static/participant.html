@@ -64,6 +64,8 @@ const T = {
     drawnWait: "A nevek ki vannak húzva! 🎉 A képeslapod hamarosan megérkezik, benne a megajándékozottad nevével és egy új linkkel.",
     notifyNote: (h) => `A változásokról a titkos Mikulásod naponta egyszer (${h} óra körül) kap egy összefoglaló e-mailt.`,
     seen: "📬 a titkos Mikulásod már megkapta",
+    copyFrom: "📋 Ötletek átmásolása egy másik húzásból:", copyBtn: "Átmásolom",
+    copied: (n, k) => `${n} ötlet átmásolva` + (k ? `, ${k} kihagyva (már szerepel, vagy betelt az 5-ös keret).` : "."),
     notSeen: "még nem küldtük el – szabadon törölheted",
     rules: "Amíg egy ötletet nem küldtünk el a titkos Mikulásodnak, egyszerűen törölheted. Ha már megkapta, jelöld „már nem aktuális”-nak, így ő is értesül róla.",
     obsoleteBtn: "Már nem aktuális…", restore: "Visszaállítás",
@@ -97,6 +99,8 @@ const T = {
     drawnWait: "The names have been drawn! 🎉 Your postcard is on its way, with your giftee's name and a new link.",
     notifyNote: (h) => `Your Secret Santa gets one summary e-mail a day (around ${h}:00) about any changes.`,
     seen: "📬 your Secret Santa has received it",
+    copyFrom: "📋 Copy my ideas from another draw:", copyBtn: "Copy",
+    copied: (n, k) => `${n} idea(s) copied` + (k ? `, ${k} skipped (already listed, or the limit of 5 is reached).` : "."),
     notSeen: "not sent yet — you can freely remove it",
     rules: "Until an idea has been sent to your Secret Santa, you can simply remove it. Once they have it, mark it as “no longer wanted” so they hear about it too.",
     obsoleteBtn: "No longer wanted…", restore: "Restore",
@@ -172,7 +176,7 @@ function render() {
   t = T[data.lang] || T.hu;
   document.documentElement.lang = data.lang;
   document.title = t.title(data.year).replace("🎅 ", "");
-  $("#title").textContent = t.title(data.year);
+  $("#title").textContent = t.title(data.year) + (data.draw_name ? ` · ${data.draw_name}` : "");
   const g = data.giftee;
   setTimeout(() => applyDesign(data.design), 0);
   $("#app").innerHTML = `
@@ -207,6 +211,10 @@ function render() {
         <button id="addbtn">${esc(t.add)}</button>
       </form>
       <p id="wmsg" class="hint"></p>
+      <div id="copybox" class="row" hidden style="margin-top:8px;align-items:center">
+        <div><label>${esc(t.copyFrom)}</label><select id="copysrc"></select></div>
+        <div style="flex:0 0 auto"><button type="button" class="secondary" id="copybtn">${esc(t.copyBtn)}</button></div>
+      </div>
     </section>
 
     <section class="card" id="lang">
@@ -221,6 +229,17 @@ function render() {
     </section>`;
 
   renderMine();
+  if (!DEMO) call("GET", "/copy-sources").then((srcs) => {
+    if (!srcs.length) return;
+    $("#copysrc").innerHTML = srcs.map((x) => `<option value="${x.draw}">${esc(x.label)} (${x.count})</option>`).join("");
+    $("#copybox").hidden = false;
+    $("#copybtn").onclick = async () => {
+      try {
+        const out = await call("POST", "/copy", { draw: +$("#copysrc").value });
+        data.my_wishes = out.my_wishes; renderMine(); flash(t.copied(out.copied, out.skipped));
+      } catch (err) { flash(err.message, true); }
+    };
+  }).catch(() => {});
   $("#wf").onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target;

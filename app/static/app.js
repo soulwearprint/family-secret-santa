@@ -120,7 +120,7 @@ function renderLogin() {
 }
 
 /* ── Main shell ────────────────────────────────────────────────────────── */
-const TABS = { years: "🎁 Years & draw", family: "👪 Family", admins: "🔑 Admins", log: "📜 Log" };
+const TABS = { years: "🎁 Years & draw", design: "🎨 Card design", family: "👪 Family", admins: "🔑 Admins", log: "📜 Log" };
 
 function renderMain() {
   const modeBanner = state.status.mail_mode === "outbox"
@@ -135,7 +135,7 @@ function renderMain() {
     try { localStorage.setItem("santa.tab", state.tab); } catch (_) {}
     renderMain();
   }));
-  ({ years: viewYears, family: viewFamily, admins: viewAdmins, log: viewLog })[state.tab]().catch((e) => {
+  ({ years: viewYears, design: viewDesign, family: viewFamily, admins: viewAdmins, log: viewLog })[state.tab]().catch((e) => {
     $("#view").innerHTML = `<p class="err">${esc(e.message)}</p>`;
   });
 }
@@ -571,3 +571,133 @@ async function showReveal(body) {
 }
 
 boot();
+
+
+/* ── Card design studio ─────────────────────────────────────────────────── */
+// Mix and match a base theme, accent colour, font, animal and decorations for a
+// year, with a live preview of every e-mail and of the personal page.
+const design = { opts: null, theme: null, saved: null, kind: "postcard", lang: "hu", timer: null };
+
+async function viewDesign() {
+  const years = await api("/api/years");
+  if (!years.length) {
+    $("#view").innerHTML = `<section class="card"><p class="muted">Create a year in the "Years & draw" tab first.</p></section>`;
+    return;
+  }
+  if (!state.year || !years.some((y) => y.year === state.year)) state.year = years[0].year;
+  const [opts, y] = await Promise.all([design.opts || api("/api/themes/options"), api(`/api/years/${state.year}`)]);
+  design.opts = opts;
+  design.saved = JSON.stringify(y.theme);
+  design.theme = JSON.parse(design.saved);
+  const art = (n) => `/static/art/svg/${n}.svg`;
+  const decoArt = (id) => (id === "ornament" ? `ornament_${design.theme.accent}` : id);
+  $("#view").innerHTML = `
+    <section class="card">
+      <div class="row">
+        <div><label>Design for year</label>
+          <select id="dyear">${years.map((x) => `<option value="${x.year}" ${x.year === state.year ? "selected" : ""}>${x.year}</option>`).join("")}</select></div>
+        <div class="actions" style="flex:2 1 300px;justify-content:flex-end;margin:0">
+          <button class="secondary" id="dsurprise">🎲 Surprise me</button>
+          <button class="secondary" id="dreset">↺ Undo changes</button>
+          <button id="dsave">💾 Save design</button>
+        </div>
+      </div>
+      <p class="hint" id="dstate"></p>
+    </section>
+    <div class="studio">
+      <div class="controls">
+        <section class="card"><h3>1 · Base theme</h3><div class="tiles" id="dbase"></div></section>
+        <section class="card"><h3>2 · Accent colour</h3><div class="swatches" id="daccent"></div></section>
+        <section class="card"><h3>3 · Font</h3><div class="fonts" id="dfont"></div>
+          <p class="hint">Only fonts built into Windows, macOS and iPhones. Android/Gmail shows its own closest match.</p></section>
+        <section class="card"><h3>4 · Theme animal</h3><div class="animals" id="danimal"></div>
+          <label class="inline"><input type="checkbox" id="dhat"> 🎅 wearing a Santa hat</label></section>
+        <section class="card"><h3>5 · Decorations</h3>
+          <p class="hint">Border icons (pick any; they alternate above and below the card):</p><div class="decos" id="dband"></div>
+          <p class="hint" style="margin-top:12px">Feature pieces:</p><div class="decos" id="dfeature"></div></section>
+      </div>
+      <div class="preview">
+        <section class="card sticky">
+          <div class="ptabs" id="dkind">
+            ${[["postcard", "📮 Postcard"], ["invite", "✉️ Invitation"], ["digest", "📬 Digest"], ["page", "🔗 Personal page"]]
+              .map(([k, l]) => `<button data-k="${k}" class="${design.kind === k ? "active" : ""}">${l}</button>`).join("")}
+            <span style="flex:1"></span>
+            ${["hu", "en"].map((l) => `<button data-l="${l}" class="small ${design.lang === l ? "active" : ""}">${l.toUpperCase()}</button>`).join("")}
+          </div>
+          <iframe id="dframe" title="Card preview"></iframe>
+          <p class="hint">Sample names only. Images in real e-mails load from your site, so they show once it's online.</p>
+        </section>
+      </div>
+    </div>`;
+
+  const th = design.theme;
+  const paint = () => {
+    $("#dbase").innerHTML = opts.bases.map((b) => `<button class="tile ${th.base === b.id ? "on" : ""}" data-base="${b.id}">
+        <span class="mini" style="background:${b.bg}"><span style="background:${b.paper};border-color:${b.second}"></span></span>${esc(b.label)}</button>`).join("");
+    $("#daccent").innerHTML = opts.accents.map((a) => `<button class="sw ${th.accent === a.id ? "on" : ""}" data-accent="${a.id}"
+        title="${esc(a.label)}"><span style="background:${a.color}"></span>${esc(a.label)}</button>`).join("");
+    $("#dfont").innerHTML = opts.fonts.map((f) => `<button class="tile font ${th.font === f.id ? "on" : ""}" data-font="${f.id}">
+        <span style="font-family:${f.body};font-size:17px">Ho-ho-ho!</span> <span style="font-family:${f.sign};font-size:19px">a Mikulás</span>
+        <small>${esc(f.label)}</small></button>`).join("");
+    $("#danimal").innerHTML = opts.animals.map((a) => `<button class="tile animal ${th.animal === a.id ? "on" : ""}" data-animal="${a.id}">
+        ${a.id === "none" ? `<span class="none">—</span>` : `<img src="${art(th.animal_hat ? a.id + "_hat" : a.id)}" alt="">`}<small>${esc(a.label)}</small></button>`).join("");
+    $("#dhat").checked = th.animal_hat;
+    const deco = (list, el) => ($(el).innerHTML = list.map((d) => `<label class="deco ${th.decorations.includes(d.id) ? "on" : ""}">
+        <input type="checkbox" data-deco="${d.id}" ${th.decorations.includes(d.id) ? "checked" : ""}>
+        <img src="${art(decoArt(d.id))}" alt="">${esc(d.label)}</label>`).join(""));
+    deco(opts.band_decorations, "#dband");
+    deco(opts.feature_decorations, "#dfeature");
+    const dirty = JSON.stringify(th) !== design.saved;
+    $("#dstate").textContent = dirty ? "● Unsaved changes — the preview shows them; e-mails still use the saved design until you save."
+      : "✓ Saved. All e-mails for this year use this design.";
+    $("#dsave").disabled = !dirty;
+    $("#dreset").disabled = !dirty;
+    schedulePreview();
+  };
+  const set = (k, v) => { th[k] = v; paint(); };
+  $("#view").onclick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.base) set("base", b.dataset.base);
+    else if (b.dataset.accent) set("accent", b.dataset.accent);
+    else if (b.dataset.font) set("font", b.dataset.font);
+    else if (b.dataset.animal) set("animal", b.dataset.animal);
+    else if (b.dataset.k) { design.kind = b.dataset.k; document.querySelectorAll("#dkind [data-k]").forEach((x) => x.classList.toggle("active", x === b)); schedulePreview(0); }
+    else if (b.dataset.l) { design.lang = b.dataset.l; document.querySelectorAll("#dkind [data-l]").forEach((x) => x.classList.toggle("active", x === b)); schedulePreview(0); }
+  };
+  $("#view").onchange = (e) => {
+    if (e.target.id === "dhat") set("animal_hat", e.target.checked);
+    if (e.target.dataset.deco) {
+      const id = e.target.dataset.deco;
+      th.decorations = e.target.checked ? [...th.decorations, id] : th.decorations.filter((d) => d !== id);
+      paint();
+    }
+    if (e.target.id === "dyear") { state.year = +e.target.value; viewDesign(); }
+  };
+  $("#dsurprise").onclick = async () => { Object.assign(th, await api("/api/themes/random")); paint(); };
+  $("#dreset").onclick = () => { Object.assign(th, JSON.parse(design.saved)); paint(); };
+  $("#dsave").onclick = async () => {
+    const saved = await api(`/api/years/${state.year}/theme`, { method: "PUT", body: { theme: th } });
+    design.saved = JSON.stringify(saved);
+    Object.assign(th, saved);
+    paint();
+  };
+  paint();
+}
+
+function schedulePreview(delay = 250) {
+  clearTimeout(design.timer);
+  design.timer = setTimeout(async () => {
+    const frame = $("#dframe");
+    if (!frame) return;
+    if (design.kind === "page") {
+      frame.removeAttribute("srcdoc");
+      frame.src = `/p/demo?v=${Date.now()}#lang=${design.lang}&t=${encodeURIComponent(JSON.stringify(design.theme))}`;
+      return;
+    }
+    const html = await api("/api/themes/preview", { method: "POST",
+      body: { theme: design.theme, kind: design.kind, lang: design.lang, year: state.year } });
+    frame.removeAttribute("src");
+    frame.srcdoc = html;
+  }, delay);
+}

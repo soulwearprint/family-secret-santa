@@ -133,6 +133,8 @@ MIGRATIONS = [
     ("wishes", "notified_texts", "TEXT NOT NULL DEFAULT '[]'"),
     # people without e-mail (small children, elderly): mail goes to this helper member
     ("members", "helper_id", "INTEGER REFERENCES members(id)"),
+    # the year's card design as JSON (see app/themes.py); '' = default
+    ("years", "theme", "TEXT NOT NULL DEFAULT ''"),
 ]
 
 

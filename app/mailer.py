@@ -18,6 +18,8 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from pathlib import Path
 
+from . import themes
+
 
 # All postcard wording, per language. Hungarian is the default.
 TEXTS = {
@@ -118,6 +120,8 @@ class Letter:
     page_url: str = ""  # personal page (wish lists, language); private to this person
     receiver_wishes: list = field(default_factory=list)  # [{"text", "url"}] known at sending time
     helper_name: str = ""  # set when the mail goes to a helper on the giver's behalf
+    theme: dict | None = None  # the year's card design (see themes.py)
+    asset_base: str = ""       # public site URL, for the artwork images; "" = no images
 
     @property
     def t(self) -> dict[str, str]:
@@ -188,103 +192,58 @@ def render_text(l: Letter) -> str:
 def render_html(l: Letter) -> str:
     e = html.escape
     t = l.t
+    tk = themes.tokens(l.theme)
     giver = e(l.giver_name)
+    ink, muted, accent = tk["ink"], tk["muted"], tk["accent"]
     details = ""
     if l.budget:
-        details += f'<tr><td style="padding:2px 0;font-size:14px;color:#5b3a1a;">🎁 <b>{t["budget"]}:</b> {e(l.budget)}</td></tr>'
+        details += f'<tr><td style="padding:2px 0;font-size:14px;color:{ink};">🎁 <b>{t["budget"]}:</b> {e(l.budget)}</td></tr>'
     if l.exchange_date:
-        details += f'<tr><td style="padding:2px 0;font-size:14px;color:#5b3a1a;">📅 <b>{t["exchange"]}:</b> {e(l.exchange_date)}</td></tr>'
-    note = (
-        f'<p style="margin:14px 0 0;font-size:14px;line-height:1.5;color:#5b3a1a;font-style:italic;">{e(l.note)}</p>'
-        if l.note else ""
-    )
-    updated = (
-        '<p style="margin:0 0 12px;padding:8px 12px;background:#fff1c2;border-left:4px solid #b8860b;font-size:13px;color:#5b3a1a;">'
-        f'{t["updated_html"]}</p>' if l.updated else ""
-    )
-    wishes = (
-        f'<p style="margin:0 0 4px;font-size:14px;color:#1d5c3f;"><b>{t["giftee_wishes"].format(receiver=e(l.receiver_name))}</b></p>'
-        + _wish_list_html(l.receiver_wishes) if l.receiver_wishes else ""
-    )
-    page = ""
-    switch = ""
+        details += f'<tr><td style="padding:2px 0;font-size:14px;color:{ink};">📅 <b>{t["exchange"]}:</b> {e(l.exchange_date)}</td></tr>'
+    note = (f'<p style="margin:14px 0 0;font-size:14px;line-height:1.5;color:{muted};font-style:italic;">{e(l.note)}</p>'
+            if l.note else "")
+    updated = (f'<p style="margin:0 0 12px;padding:8px 12px;background:{_mix(accent, tk["paper"], .12)};border-left:4px solid {accent};'
+               f'font-size:13px;color:{ink};">{t["updated_html"]}</p>' if l.updated else "")
+    wishes = (f'<p style="margin:0 0 4px;font-size:14px;color:{accent};"><b>{t["giftee_wishes"].format(receiver=e(l.receiver_name))}</b></p>'
+              + _wish_list_html(l.receiver_wishes, tk) if l.receiver_wishes else "")
+    page = switch = ""
     if l.page_url:
         url = e(l.page_url)
-        page = (
-            '<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:18px auto 4px;">'
-            f'<tr><td align="center" style="border-radius:8px;background:#1d5c3f;">'
-            f'<a href="{url}" style="display:inline-block;padding:11px 22px;font-family:Arial,sans-serif;font-size:15px;'
-            f'font-weight:bold;color:#ffffff;text-decoration:none;">{t["page_button"]}</a></td></tr></table>'
-            f'<p style="margin:0;text-align:center;font-size:13px;color:#5b3a1a;">{t["page_sub"].format(receiver=e(l.receiver_name))}</p>'
-        )
-        switch = f' &middot; <a href="{url}#lang" style="color:#8a6a45;">{t["switch_lang"]}</a>'
-    serif = "Georgia,'Times New Roman',serif"
-    script = "'Brush Script MT','Segoe Script','Lucida Handwriting',cursive"
-    # Table layout + inline styles only: that is what e-mail clients render reliably.
-    return f"""<!doctype html>
-<html lang="{e(l.lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><title>{e(subject(l))}</title></head>
-<body style="margin:0;padding:0;background:#0f2f24;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{t["preheader"]}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f2f24;">
-<tr><td align="center" style="padding:28px 12px;">
-  <div style="font-size:18px;letter-spacing:10px;color:#e8f1ee;padding-bottom:10px;">❄ ✦ ❄ ✦ ❄</div>
-  <!-- airmail border -->
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#c8102e;background-image:repeating-linear-gradient(135deg,#c8102e 0 18px,#ffffff 18px 30px,#1d5c3f 30px 48px,#ffffff 48px 60px);border-radius:6px;">
-  <tr><td style="padding:10px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3e2;border-radius:3px;">
-    <tr>
-      <td style="padding:22px 24px 0;font-family:{serif};font-size:12px;letter-spacing:3px;color:#8a6a45;text-transform:uppercase;">
-        {t["header"]}
-      </td>
-      <td align="right" valign="top" style="padding:16px 18px 0 0;width:120px;">
-        <!-- stamp -->
-        <table role="presentation" cellpadding="0" cellspacing="0" style="border:2px dashed #c8102e;background:#ffffff;">
-        <tr><td align="center" style="padding:6px 10px;font-family:{serif};">
-          <div style="font-size:34px;line-height:40px;">🎅</div>
-          <div style="font-size:9px;letter-spacing:1px;color:#c8102e;font-weight:bold;">{t["stamp"]}</div>
-          <div style="font-size:9px;color:#1d5c3f;">{l.year} · 1 ♥</div>
-        </td></tr></table>
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="padding:0 24px;">
-        <!-- postmark -->
-        <div style="float:right;margin:-6px 70px 0 0;width:78px;height:78px;border:2px solid #3b5f8a;border-radius:50%;color:#3b5f8a;font-family:{serif};font-size:9px;text-align:center;line-height:12px;opacity:.75;transform:rotate(-14deg);">
-          <div style="padding-top:20px;">{t["postmark"]}</div>
-        </div>
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="padding:6px 28px 8px;font-family:{serif};color:#3a2410;">
+        page = (_button(l.page_url, t["page_button"], tk)
+                + f'<p style="margin:0;text-align:center;font-size:13px;color:{muted};">{t["page_sub"].format(receiver=e(l.receiver_name))}</p>')
+        switch = f' &middot; <a href="{url}#lang" style="color:{muted};">{t["switch_lang"]}</a>'
+
+    stamp_art = tk["animal"] or "santa_face"
+    stamp = (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" style="border:2px dashed {accent};background:#ffffff;">'
+        f'<tr><td align="center" style="padding:6px 8px;font-family:{tk["font"]};">'
+        f'{_img(l.asset_base, stamp_art, 58, 58 if tk["animal"] else 70, tk["animal_alt"] or "🎅")}'
+        f'<div style="font-size:9px;letter-spacing:1px;color:{accent};font-weight:bold;">{t["stamp"]}</div>'
+        f'<div style="font-size:9px;color:{muted};">{l.year} · 1 ♥</div></td></tr></table>'
+    )
+    postmark = (
+        f'<div style="margin:26px 0 0;width:74px;height:74px;border:2px solid {muted};border-radius:50%;'
+        f'color:{muted};font-family:{tk["font"]};font-size:9px;text-align:center;line-height:12px;opacity:.7;transform:rotate(-14deg);">'
+        f'<div style="padding-top:18px;">{t["postmark"]}</div></div>'
+    )
+    inner = f"""
         {on_behalf_html(l.lang, l.helper_name, l.giver_name)}
         <p style="margin:0 0 12px;font-size:22px;">{t["greeting"].format(giver=giver)}</p>
         {updated}
         <p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{t["body"].format(year=l.year)}</p>
         <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:6px auto 16px;">
-        <tr><td align="center" style="padding:14px 30px;border:2px solid #b8860b;border-radius:10px;background:#fffaf0;">
-          <div style="font-size:12px;letter-spacing:3px;color:#1d5c3f;">{t["giftee"]}</div>
-          <div style="font-size:30px;font-weight:bold;color:#c8102e;padding-top:4px;">{e(l.receiver_name)}</div>
+        <tr><td align="center" style="padding:14px 30px;border:2px solid {accent};border-radius:10px;background:#ffffff;">
+          <div style="font-size:12px;letter-spacing:2px;color:{muted};">{t["giftee"]}</div>
+          <div style="font-size:30px;font-weight:bold;color:{accent};padding-top:4px;">{e(l.receiver_name)}</div>
         </td></tr></table>
         {wishes}
         <table role="presentation" cellpadding="0" cellspacing="0">{details}</table>
         {note}
         {page}
-        <p style="margin:16px 0 0;font-size:14px;line-height:1.5;">{t["secret"]}</p>
-        <p style="margin:18px 0 0;font-size:14px;">{t["closing"]}</p>
-        <p style="margin:2px 0 0;font-family:{script};font-size:34px;color:#c8102e;">{t["signature"]}</p>
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2" style="padding:10px 28px 18px;border-top:1px dashed #d9c7a3;font-family:{serif};font-size:11px;color:#8a6a45;">
-        {t["footer"].format(giver=giver)}{switch}
-      </td>
-    </tr>
-    </table>
-  </td></tr></table>
-  <div style="font-size:18px;letter-spacing:10px;color:#e8f1ee;padding-top:10px;">❄ ✦ ❄ ✦ ❄</div>
-</td></tr></table>
-</body></html>"""
+        <p style="margin:16px 0 0;font-size:14px;line-height:1.5;">{t["secret"]}</p>"""
+    return _frame(tk, l.lang, subject(l), t["preheader"], t["header"], inner,
+                  t["footer"].format(giver=giver) + switch, l.asset_base, stamp=stamp, postmark=postmark,
+                  stamp_uses_santa=not tk["animal"])
 
 
 def build_message(l: Letter) -> EmailMessage:
@@ -338,50 +297,114 @@ def deliver(msg: EmailMessage, to_email: str, tag: str, for_name: str = "") -> N
 
 # ─── Other mails: wish-list invitation, "new gift idea" notice ────────────
 
-def _wish_list_html(items: list) -> str:
+def _mix(a: str, b: str, amount: float) -> str:
+    """Blend colour a into b (amount of a, 0..1). Inline-style e-mails can't use rgba reliably."""
+    pa = [int(a[i:i + 2], 16) for i in (1, 3, 5)]
+    pb = [int(b[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x * amount + y * (1 - amount)):02x}" for x, y in zip(pa, pb))
+
+
+def _img(base: str, name: str, w: int, h: int, alt: str, style: str = "") -> str:
+    """Artwork as a hosted PNG (works in Gmail/Outlook/Apple Mail). Without a public
+    base URL (local testing) fall back to the emoji, which is also the alt text."""
+    if not base:
+        return f'<span style="font-size:{int(h * .55)}px;line-height:{h}px;">{alt}</span>'
+    return (f'<img src="{html.escape(base.rstrip("/"))}/static/art/png/{name}.png" width="{w}" height="{h}" alt="{html.escape(alt)}" '
+            f'style="display:inline-block;border:0;outline:none;text-decoration:none;{style}">')
+
+
+def _band(tk: dict, base: str) -> str:
+    """Row of small decorations on the dark page background, above and below the card."""
+    if not tk["band"]:
+        return ""
+    cells = []
+    for i in range(7):
+        name, alt = tk["band"][i % len(tk["band"])], tk["band_alt"][i % len(tk["band_alt"])]
+        size = 30 if i % 2 == 0 else 22
+        cells.append(f'<td align="center" valign="middle" style="padding:0 7px;">{_img(base, name, size, size, alt)}</td>')
+    return (f'<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:0 auto;">'
+            f'<tr>{"".join(cells)}</tr></table>')
+
+
+def _wish_list_html(items: list, tk: dict | None = None) -> str:
     e = html.escape
+    tk = tk or themes.tokens(None)
     lis = "".join(
         f'<li style="margin:3px 0;">{e(w["text"])}'
-        + (f' &mdash; <a href="{e(w["url"])}" style="color:#1d5c3f;">link</a>' if w.get("url") else "") + "</li>"
+        + (f' &mdash; <a href="{e(w["url"])}" style="color:{tk["accent"]};">link</a>' if w.get("url") else "") + "</li>"
         for w in items
     )
-    return f'<ul style="margin:0 0 14px;padding-left:22px;font-size:14px;color:#3a2410;">{lis}</ul>'
+    return f'<ul style="margin:0 0 14px;padding-left:22px;font-size:14px;color:{tk["ink"]};">{lis}</ul>'
 
 
-def _button(url: str, label: str) -> str:
+def _button(url: str, label: str, tk: dict | None = None) -> str:
     e = html.escape
+    tk = tk or themes.tokens(None)
     return (
         '<table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin:18px auto 6px;">'
-        f'<tr><td align="center" style="border-radius:8px;background:#1d5c3f;"><a href="{e(url)}" '
+        f'<tr><td align="center" style="border-radius:8px;background:{tk["accent"]};"><a href="{e(url)}" '
         'style="display:inline-block;padding:11px 22px;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;'
         f'color:#ffffff;text-decoration:none;">{label}</a></td></tr></table>'
     )
 
 
-def _shell(lang: str, title: str, preheader: str, inner: str, footer: str) -> str:
-    """The same airmail-postcard frame as the main card, without stamp/postmark."""
+def _callout(text_html: str, tk: dict) -> str:
+    return (f'<p style="margin:0;padding:8px 12px;background:{_mix(tk["accent"], tk["paper"], .12)};'
+            f'border-left:4px solid {tk["accent"]};font-size:14px;color:{tk["ink"]};">{text_html}</p>')
+
+
+def _frame(tk: dict, lang: str, title: str, preheader: str, header: str, inner: str, footer: str, base: str,
+           stamp: str = "", postmark: str = "", stamp_uses_santa: bool = False) -> str:
+    """The airmail-postcard frame shared by every e-mail, styled by the year's theme.
+    Table layout + inline styles only: that is what e-mail clients render reliably."""
     e = html.escape
-    serif = "Georgia,'Times New Roman',serif"
-    script = "'Brush Script MT','Segoe Script','Lucida Handwriting',cursive"
     t = TEXTS.get(lang, TEXTS[DEFAULT_LANG])
+    font, ink, muted, accent, paper = tk["font"], tk["ink"], tk["muted"], tk["accent"], tk["paper"]
+    if not stamp:  # invitations/digests: a small mascot in the header instead of a stamp
+        mascot = tk["animal"] or ("santa_face" if tk["santa_face"] else "")
+        stamp = _img(base, mascot, 52, 52 if tk["animal"] else 62, tk["animal_alt"] or "🎅") if mascot else ""
+        stamp_uses_santa = mascot == "santa_face"
+    # Figure next to Santa's signature
+    side = ""
+    if tk["santa_full"]:
+        side = _img(base, "santa_full", 66, 110, "🎅")
+    elif tk["santa_face"] and not stamp_uses_santa:
+        side = _img(base, "santa_face", 60, 72, "🎅")
+    sleigh = (f'<div style="padding-bottom:8px;">{_img(base, "sleigh", 336, 96, "🛷 🦌🦌")}</div>' if tk["sleigh"] else "")
+    band = _band(tk, base) or f'<div style="font-size:18px;letter-spacing:10px;color:{_mix("#ffffff", tk["bg"], .85)};">❄ ✦ ❄ ✦ ❄</div>'
+    stripes = (f"repeating-linear-gradient(135deg,{accent} 0 18px,#ffffff 18px 30px,{tk['second']} 30px 48px,#ffffff 48px 60px)")
     return f"""<!doctype html>
 <html lang="{e(lang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light"><title>{e(title)}</title></head>
-<body style="margin:0;padding:0;background:#0f2f24;">
+<body style="margin:0;padding:0;background:{tk["bg"]};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{preheader}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0f2f24;"><tr><td align="center" style="padding:28px 12px;">
-  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#c8102e;background-image:repeating-linear-gradient(135deg,#c8102e 0 18px,#ffffff 18px 30px,#1d5c3f 30px 48px,#ffffff 48px 60px);border-radius:6px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{tk["bg"]};">
+<tr><td align="center" style="padding:24px 12px;">
+  {sleigh}
+  <div style="padding-bottom:10px;">{band}</div>
+  <!-- airmail border -->
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:{accent};background-image:{stripes};border-radius:6px;">
   <tr><td style="padding:10px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fbf3e2;border-radius:3px;">
-    <tr><td style="padding:22px 28px 0;font-family:{serif};font-size:12px;letter-spacing:3px;color:#8a6a45;text-transform:uppercase;">{t["header"]} &nbsp;🎅</td></tr>
-    <tr><td style="padding:12px 28px 8px;font-family:{serif};color:#3a2410;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{paper};border-radius:3px;">
+    <tr>
+      <td style="padding:22px 24px 0 28px;font-family:{font};font-size:11px;letter-spacing:2px;color:{muted};text-transform:uppercase;" valign="top">{header}</td>
+      <td align="right" valign="top" style="padding:0 0 0 8px;width:82px;">{postmark}</td>
+      <td align="right" valign="top" style="padding:14px 18px 0 0;width:110px;">{stamp}</td>
+    </tr>
+    <tr><td colspan="3" style="padding:6px 28px 8px;font-family:{font};color:{ink};">
       {inner}
-      <p style="margin:18px 0 0;font-size:14px;">{t["closing"]}</p>
-      <p style="margin:2px 0 0;font-family:{script};font-size:32px;color:#c8102e;">{t["signature"]}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;"><tr>
+        <td valign="bottom" style="font-family:{font};color:{ink};">
+          <p style="margin:0;font-size:14px;">{t["closing"]}</p>
+          <p style="margin:2px 0 0;font-family:{tk["sign_font"]};font-size:34px;color:{accent};">{t["signature"]}</p>
+        </td>
+        <td align="right" valign="bottom" style="width:80px;">{side}</td>
+      </tr></table>
     </td></tr>
-    <tr><td style="padding:10px 28px 18px;border-top:1px dashed #d9c7a3;font-family:{serif};font-size:11px;color:#8a6a45;">{footer}</td></tr>
+    <tr><td colspan="3" style="padding:10px 28px 18px;border-top:1px dashed {_mix(muted, paper, .45)};font-family:{font};font-size:11px;color:{muted};">{footer}</td></tr>
     </table>
   </td></tr></table>
+  <div style="padding-top:10px;">{band}</div>
 </td></tr></table>
 </body></html>"""
 
@@ -431,15 +454,16 @@ INVITE = {
 
 
 def build_invite(name: str, to_email: str, lang: str, year: int, budget: str, url: str,
-                 helper_name: str = "") -> EmailMessage:
+                 helper_name: str = "", theme: dict | None = None, asset_base: str = "") -> EmailMessage:
     e = html.escape
     t = INVITE.get(lang, INVITE[DEFAULT_LANG])
+    tk = themes.tokens(theme)
     inner = (
         on_behalf_html(lang, helper_name, name)
         + f'<p style="margin:0 0 12px;font-size:22px;">{t["greeting"].format(name=e(name))}</p>'
         f'<p style="margin:0 0 12px;font-size:15px;line-height:1.6;">{t["body"].format(year=year)}</p>'
-        + (f'<p style="margin:0;padding:8px 12px;background:#fff1c2;border-left:4px solid #b8860b;font-size:14px;">💰 {t["budget"].format(budget=e(budget))}</p>' if budget else "")
-        + _button(url, t["button"])
+        + (_callout(f'💰 {t["budget"].format(budget=e(budget))}', tk) if budget else "")
+        + _button(url, t["button"], tk)
         + f'<p style="margin:12px 0 0;font-size:14px;line-height:1.5;">{t["after"]}</p>'
     )
     text = "\n".join([
@@ -449,7 +473,8 @@ def build_invite(name: str, to_email: str, lang: str, year: int, budget: str, ur
     ])
     subj = t["subject"].format(name=name)
     return _envelope(lang, helper_name or name, to_email, subj, text,
-                     _shell(lang, subj, t["pre"], inner, t["footer"].format(url=e(url))))
+                     _frame(tk, lang, subj, t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"], inner,
+                            t["footer"].format(url=e(url)).replace("#8a6a45", tk["muted"]), asset_base))
 
 
 REASONS = {
@@ -495,25 +520,27 @@ DIGEST = {
 
 
 def build_digest(name: str, to_email: str, lang: str, receiver: str, new_items: list, gone_items: list,
-                 current: list, budget: str, helper_name: str = "") -> EmailMessage:
+                 current: list, budget: str, helper_name: str = "", theme: dict | None = None,
+                 asset_base: str = "") -> EmailMessage:
     e = html.escape
     t = DIGEST.get(lang, DIGEST[DEFAULT_LANG])
+    tk = themes.tokens(theme)
     reasons = REASONS.get(lang, REASONS[DEFAULT_LANG])
     h3 = lambda txt, color: f'<p style="margin:10px 0 4px;font-size:14px;color:{color};"><b>{txt}</b></p>'
     gone_html = "".join(
-        f'<li style="margin:3px 0;"><s>{e(i["text"])}</s> <span style="color:#8a6a45;">&ndash; {e(reasons.get(i["reason"], reasons["other"]))}</span></li>'
+        f'<li style="margin:3px 0;"><s>{e(i["text"])}</s> <span style="color:{tk["muted"]};">&ndash; {e(reasons.get(i["reason"], reasons["other"]))}</span></li>'
         for i in gone_items)
     inner = (
         on_behalf_html(lang, helper_name, name)
         + f'<p style="margin:0 0 12px;font-size:22px;">{t["greeting"].format(name=e(name))}</p>'
         f'<p style="margin:0 0 6px;font-size:15px;">{t["intro"].format(receiver=e(receiver))}</p>'
-        + (h3("✨ " + t["new"], "#1d5c3f") + _wish_list_html(new_items) if new_items else "")
-        + (h3("✖ " + t["gone"], "#c8102e") + f'<ul style="margin:0 0 14px;padding-left:22px;font-size:14px;color:#3a2410;">{gone_html}</ul>'
+        + (h3("✨ " + t["new"], tk["accent"]) + _wish_list_html(new_items, tk) if new_items else "")
+        + (h3("✖ " + t["gone"], tk["muted"]) + f'<ul style="margin:0 0 14px;padding-left:22px;font-size:14px;color:{tk["ink"]};">{gone_html}</ul>'
            if gone_items else "")
-        + h3("🎁 " + t["all"], "#3a2410")
-        + (_wish_list_html(current) if current else f'<p style="margin:0 0 14px;font-size:14px;color:#8a6a45;">{t["empty"]}</p>')
-        + (f'<p style="margin:0;padding:8px 12px;background:#fff1c2;border-left:4px solid #b8860b;font-size:14px;">💰 {t["budget"].format(budget=e(budget))}</p>' if budget else "")
-        + f'<p style="margin:12px 0 0;font-size:13px;color:#5b3a1a;">{t["hint"]}</p>'
+        + h3("🎁 " + t["all"], tk["ink"])
+        + (_wish_list_html(current, tk) if current else f'<p style="margin:0 0 14px;font-size:14px;color:{tk["muted"]};">{t["empty"]}</p>')
+        + (_callout(f'💰 {t["budget"].format(budget=e(budget))}', tk) if budget else "")
+        + f'<p style="margin:12px 0 0;font-size:13px;color:{tk["muted"]};">{t["hint"]}</p>'
     )
     fmt = lambda items: [f"  - {w['text']}" + (f" ({w['url']})" if w.get("url") else "") for w in items]
     text = "\n".join([
@@ -524,4 +551,5 @@ def build_digest(name: str, to_email: str, lang: str, receiver: str, new_items: 
         *([t["budget_text"].format(budget=budget), ""] if budget else []), t["hint"],
     ])
     return _envelope(lang, helper_name or name, to_email, t["subject"], text,
-                     _shell(lang, t["subject"], t["pre"], inner, t["footer"]))
+                     _frame(tk, lang, t["subject"], t["pre"], TEXTS.get(lang, TEXTS[DEFAULT_LANG])["header"],
+                            inner, t["footer"], asset_base))

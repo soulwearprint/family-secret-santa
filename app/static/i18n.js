@@ -5,6 +5,7 @@
 
 const HU = {
   // ── header / shell ──
+  "Family Secret Santa": "Pereputty Angyalkázás",  // the app name differs per language
   "📖 How it works": "📖 Így működik",
   "Loading…": "Betöltés…",
   "Admin": "Admin",
@@ -467,6 +468,9 @@ const I18N = {
   applyStatic() {
     const l = this.lang;
     document.documentElement.lang = l;
+    document.title = t("Family Secret Santa");
+    const at = document.getElementById("apptitle");
+    if (at) at.textContent = t("Family Secret Santa");
     const g = document.getElementById("guidelink");
     if (g) { g.textContent = t("📖 How it works"); g.href = `/guide?lang=${l}`; }
     const sw = document.getElementById("langsw");

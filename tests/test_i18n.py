@@ -63,3 +63,11 @@ def test_guide_has_hungarian_version(client):
     # both versions have the same sections
     ids = lambda html: re.findall(r'<section class="card" id="(\w+)"', html)
     assert ids(en.text) == ids(hu.text) and len(ids(en.text)) >= 13
+
+
+def test_app_name_follows_language(client):
+    assert 'Family Secret Santa' in client.get("/guide").text.split("</h1>")[0]
+    assert 'Pereputty Angyalkázás' not in client.get("/guide").text.split("</h1>")[0]
+    assert 'Pereputty Angyalkázás' in client.get("/guide?lang=hu").text.split("</h1>")[0]
+    src = (STATIC / "i18n.js").read_text(encoding="utf-8")
+    assert '"Family Secret Santa": "Pereputty Angyalkázás"' in src

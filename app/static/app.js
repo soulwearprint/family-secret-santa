@@ -1,5 +1,5 @@
 "use strict";
-/* Pereputty Angyalkázás — vanilla JS front end. All data comes from /api.
+/* Family Secret Santa (Hungarian: Pereputty Angyalkázás) — vanilla JS front end. All data comes from /api.
    Every visible string goes through t() (see i18n.js), so the admin panel works in Hungarian and English. */
 
 const $ = (sel, el = document) => el.querySelector(sel);

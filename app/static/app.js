@@ -1,5 +1,5 @@
 "use strict";
-/* Family Secret Santa — vanilla JS front end. All data comes from /api. */
+/* Pereputty Angyalkázás — vanilla JS front end. All data comes from /api. */
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

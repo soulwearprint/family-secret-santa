@@ -1,4 +1,4 @@
-"""Family Secret Santa — FastAPI app.
+"""Pereputty Angyalkázás (family Secret Santa) — FastAPI app.
 
 Run:  uvicorn app.main:app --port 8080   (from the secret-santa/ folder)
 """
@@ -40,7 +40,7 @@ async def lifespan(_app):
         task.cancel()
 
 
-app = FastAPI(title="Family Secret Santa", docs_url=None, redoc_url=None, lifespan=lifespan)
+app = FastAPI(title="Pereputty Angyalkázás", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 
 # ─── Sessions ──────────────────────────────────────────────────────────────

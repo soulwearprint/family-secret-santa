@@ -1,4 +1,9 @@
-# 🎅 Family Secret Santa
+# 🎅 Pereputty Angyalkázás
+
+*Our family Secret Santa.* *Pereputty* is the whole clan, in-laws and friends
+included. *Angyalkázás* is the Hungarian name for drawing names in secret. The
+e-mails and the personal page keep their Santa wording ("titkos Mikulás", signed
+"a Mikulás" from the North Pole).
 
 A small self-hosted app for a family Secret Santa: keep a family list with
 e-mail addresses, draw names secretly each year, and e-mail every person

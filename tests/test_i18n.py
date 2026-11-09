@@ -40,7 +40,7 @@ def test_server_messages_have_hungarian():
     plain = set(re.findall(r'HTTPException\(\d+, "([^"]+)"', main))
     plain |= set(re.findall(r'_google_fail\("([^"]+)"', main))
     plain |= set(re.findall(r'db\.audit\(conn, [^,]+, "([^"]+)"', main))
-    plain |= {"draw", "reshuffle (everyone)", "partial reshuffle"}  # audit kinds chosen at runtime
+    plain |= {"draw", "reshuffle (everyone)", "partial reshuffle", "member deleted"}  # audit actions chosen at runtime
     missing = sorted(plain - _hu_keys())
     assert not missing, missing
     from app.draw import IMPOSSIBLE

@@ -1,8 +1,8 @@
 # 🎅 Family Secret Santa · Pereputty Angyalkázás
 
 *Our family Secret Santa.* The app is called **Family Secret Santa** in English
-and **Pereputty Angyalkázás** in Hungarian (the admin panel and the guide show
-the name that matches their language). *Pereputty* is the whole clan, in-laws and friends
+and **Pereputty Angyalkázás** in Hungarian (the admin panel, the guide and the
+participants' personal page show the name that matches their language). *Pereputty* is the whole clan, in-laws and friends
 included. *Angyalkázás* is the Hungarian name for drawing names in secret. The
 e-mails and the personal page keep their Santa wording ("titkos Mikulás", signed
 "a Mikulás" from the North Pole).

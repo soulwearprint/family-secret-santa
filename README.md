@@ -244,6 +244,14 @@ PNG.
   ```
   `render_art.js` needs Playwright with Chromium.
 
+**App icon:** a Santa head (the `santa_face` art) on a pine-green tile, in
+`app/static/favicon.svg`. Every page links it, with `favicon-32.png` and
+`apple-touch-icon.png` (phone home screen) as fallbacks, and the server also
+answers `/favicon.ico`. After changing the SVG, regenerate the others:
+```bash
+node tools/render_favicon.js
+```
+
 ### Secrecy model
 
 - The matches are **encrypted at rest** with AES-256-GCM. The key is wrapped

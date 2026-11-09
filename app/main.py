@@ -1717,6 +1717,12 @@ def participant_html(token: str):
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Browsers ask for this on their own, even on pages without <link rel=icon>."""
+    return FileResponse(STATIC / "favicon.ico", media_type="image/x-icon", headers={"Cache-Control": "public, max-age=604800"})
+
+
 @app.get("/guide", include_in_schema=False)
 def guide(lang: str = "en"):
     """How the app works and every rule it follows (public: contains nothing private). ?lang=hu for Hungarian."""

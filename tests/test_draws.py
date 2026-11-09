@@ -216,3 +216,12 @@ def test_old_global_exclusions_are_migrated_into_every_draw(tmp_path, monkeypatc
 def test_guide_page_is_public(client):
     r = client.get("/guide")
     assert r.status_code == 200 and "Draw rules" in r.text and "Purpose and goal" in r.text
+
+
+def test_log_names_the_draw_not_its_internal_id(fam):
+    c, ids = fam
+    d = ok(c.post("/api/draws", json={"cal_year": 2026, "name": "Cousins", "source": "everyone"}))["year"]
+    assert d > 100000  # new draws get an internal id that means nothing to people
+    ok(c.post(f"/api/years/{d}/draw", json={}))
+    row = next(r for r in ok(c.get("/api/audit")) if r["action"] == "draw")
+    assert row["detail"].startswith("2026 · Cousins:") and str(d) not in row["detail"]

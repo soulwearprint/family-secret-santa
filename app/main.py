@@ -644,7 +644,7 @@ def add_fixed(year: int, body: FixedPairIn, s: Session = Depends(current)):
             raise HTTPException(409, "One of them is already in a fixed pair this year.")
         conn.execute("INSERT INTO fixed_pairs (year, giver_id, receiver_id) VALUES (?, ?, ?)",
                      (year, body.giver_id, body.receiver_id))
-        db.audit(conn, s.admin_name, "fixed pair added", f"{year}: {names[body.giver_id]} → {names[body.receiver_id]}")
+        db.audit(conn, s.admin_name, "fixed pair added", f"{_draw_label(conn, year)}: {names[body.giver_id]} → {names[body.receiver_id]}")
     return {"ok": True}
 
 
@@ -653,7 +653,7 @@ def delete_fixed(year: int, giver_id: int, s: Session = Depends(current)):
     with db.connect() as conn:
         names = _names(conn, [giver_id])
         conn.execute("DELETE FROM fixed_pairs WHERE year = ? AND giver_id = ?", (year, giver_id))
-        db.audit(conn, s.admin_name, "fixed pair removed", f"{year}: {names.get(giver_id, '?')} →")
+        db.audit(conn, s.admin_name, "fixed pair removed", f"{_draw_label(conn, year)}: {names.get(giver_id, '?')} →")
     return {"ok": True}
 
 
@@ -673,6 +673,12 @@ def _cal(y) -> int:
 
 def _label(y) -> str:
     return f"{_cal(y)} · {y['name']}" if y["name"] else str(_cal(y))
+
+
+def _draw_label(conn, year: int) -> str:
+    """Human label of a draw for the activity log (never the internal id)."""
+    row = conn.execute("SELECT * FROM years WHERE year = ?", (year,)).fetchone()
+    return _label(row) if row else str(year)
 
 
 def _previous_draw(conn, y, drawn_only: bool = False):
@@ -852,7 +858,7 @@ def set_participants(year: int, body: ParticipantsIn, s: Session = Depends(curre
             raise HTTPException(422, "Unknown member id(s).")
         conn.execute("DELETE FROM year_participants WHERE year = ?", (year,))
         conn.executemany("INSERT INTO year_participants (year, member_id) VALUES (?, ?)", [(year, i) for i in ids])
-        db.audit(conn, s.admin_name, "participants changed", f"{year}: {len(ids)} people")
+        db.audit(conn, s.admin_name, "participants changed", f"{_draw_label(conn, year)}: {len(ids)} people")
         st = _state(conn, year)
     return {"drawn": st["drawn"], "in_sync": st["in_sync"], "needs_reshuffle": st["drawn"] and not st["in_sync"]}
 
@@ -920,7 +926,7 @@ def run_draw(year: int, body: ReshuffleIn, s: Session = Depends(current)):
             if old_giver_of.get(r) != g:
                 _reset_for_new_giver(conn, year, r)
         kind = "draw" if not st["drawn"] else ("reshuffle (everyone)" if body.everyone else "partial reshuffle")
-        db.audit(conn, s.admin_name, kind, f"{year}: {len(plan.reshuffled)} of {len(people)} redrawn")
+        db.audit(conn, s.admin_name, kind, f"{_draw_label(conn, year)}: {len(plan.reshuffled)} of {len(people)} redrawn")
     return {
         "reshuffled": len(plan.reshuffled),
         "hidden_count": plan.hidden_count if st["drawn"] and not body.everyone else 0,
@@ -959,7 +965,7 @@ def invite(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
                 continue
             _store_link(conn, token, year, mid, None, giver_of.get(mid))
             results.append({"id": mid, "name": m["name"], "ok": True})
-        db.audit(conn, s.admin_name, "wish-list invitations sent", f"{year}: {sum(x['ok'] for x in results)} ok")
+        db.audit(conn, s.admin_name, "wish-list invitations sent", f"{_draw_label(conn, year)}: {sum(x['ok'] for x in results)} ok")
     return {"results": results, "mode": mailer.mode()}
 
 
@@ -1013,7 +1019,7 @@ def notify(year: int, body: NotifyIn, request: Request, s: Session = Depends(cur
             _store_link(conn, token, year, r["giver_id"], receiver, giver_of.get(r["giver_id"]))
             _mark_all_sent(conn, year, receiver)  # the card listed the ideas; nothing pending for this giver
             results.append({"id": r["giver_id"], "name": r["name"], "ok": True})
-        db.audit(conn, s.admin_name, "postcards sent", f"{year}: {sum(x['ok'] for x in results)} ok, "
+        db.audit(conn, s.admin_name, "postcards sent", f"{_draw_label(conn, year)}: {sum(x['ok'] for x in results)} ok, "
                  f"{sum(not x['ok'] for x in results)} failed")
     return {"results": results, "mode": mailer.mode()}
 
@@ -1115,7 +1121,7 @@ def set_year_theme(year: int, body: ThemeIn, s: Session = Depends(current)):
     with db.connect() as conn:
         _year_or_404(conn, year)
         conn.execute("UPDATE years SET theme = ? WHERE year = ?", (json.dumps(theme), year))
-        db.audit(conn, s.admin_name, "card design changed", f"{year}: {theme['base']}/{theme['accent']}/{theme['animal']}")
+        db.audit(conn, s.admin_name, "card design changed", f"{_draw_label(conn, year)}: {theme['base']}/{theme['accent']}/{theme['animal']}")
     return theme
 
 
@@ -1371,7 +1377,7 @@ def run_digest() -> dict:
                                to, f"{year}_ideas", for_name=g_name if helper else "")
             except Exception as exc:  # keep it queued; try again next run
                 failed += 1
-                db.audit(conn, "system", "wish-list digest FAILED", f"{year}: to {r_name}'s Secret Santa ({type(exc).__name__})")
+                db.audit(conn, "system", "wish-list digest FAILED", f"{_draw_label(conn, year)}: to {r_name}'s Secret Santa ({type(exc).__name__})")
                 continue
             for i in items:
                 if i in new:
@@ -1380,7 +1386,7 @@ def run_digest() -> dict:
                     i["obsolete_sent"] = True
             _save_items(conn, year, receiver, items)
             conn.execute("DELETE FROM digest_queue WHERE year = ? AND receiver_id = ?", (year, receiver))
-            db.audit(conn, "system", "wish-list digest sent", f"{year}: to {r_name}'s Secret Santa")
+            db.audit(conn, "system", "wish-list digest sent", f"{_draw_label(conn, year)}: to {r_name}'s Secret Santa")
             sent += 1
         db.set_setting(conn, "last_digest_at", db.now())
     return {"sent": sent, "failed": failed}
@@ -1712,9 +1718,9 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/guide", include_in_schema=False)
-def guide():
-    """How the app works and every rule it follows (public: contains nothing private)."""
-    return FileResponse(STATIC / "guide.html")
+def guide(lang: str = "en"):
+    """How the app works and every rule it follows (public: contains nothing private). ?lang=hu for Hungarian."""
+    return FileResponse(STATIC / ("guide.hu.html" if lang == "hu" else "guide.html"))
 
 
 @app.get("/", include_in_schema=False)

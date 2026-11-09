@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Így működik · Pereputty Angyalkázás</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    main { max-width: 820px; }
+    .doc h2 { margin-top: 0; }
+    .doc h3 { color: var(--green); margin: 18px 0 6px; font-size: 16px; }
+    .doc p, .doc li { line-height: 1.6; }
+    .doc ul, .doc ol { padding-left: 22px; }
+    .doc li { margin: 4px 0; }
+    .toc { columns: 2; column-gap: 24px; padding-left: 18px; }
+    @media (max-width: 600px) { .toc { columns: 1; } }
+    .rule { border-left: 4px solid var(--gold); background: #fffaf0; padding: 8px 12px; margin: 8px 0; border-radius: 4px; }
+    .why { color: var(--muted); font-size: 14px; }
+    code { background: #f3ede1; padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+    table.t td, table.t th { vertical-align: top; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🎅 Pereputty Angyalkázás — így működik</h1>
+  <div style="display:flex;gap:14px;align-items:center">
+    <a href="/guide?lang=en" style="color:#fff" lang="en">🇬🇧 English</a>
+    <a href="/" style="color:#fff">← vissza az alkalmazásba</a>
+  </div>
+</header>
+<main class="doc">
+
+<section class="card">
+  <h2>Cél és rendeltetés</h2>
+  <p>A <b>Pereputty Angyalkázás</b> a családunk titkos Mikulás-játéka. A <i>pereputty</i> az egész nagy rokonság — sógorok,
+    komák, barátok, mindenki —, az <i>angyalkázás</i> pedig a titkos névhúzás. Az alkalmazás ennek a nagy, tágabb
+    „családnak” szervezi az ajándékhúzásokat, ami bőven túlnyúlhat a rokonságon. Mindenki kihúz valakit, akinek ajándékot vesz,
+    és senki sem tudhatja, ki húzta őt, amíg ki nem bontják az ajándékokat.</p>
+  <p>Az alkalmazás céljai, fontossági sorrendben:</p>
+  <ol>
+    <li><b>Őrizze a titkot.</b> Senki sem látja — még az alkalmazást kezelők sem —, ki kit húzott, hacsak egy admin
+      szándékosan fel nem oldja, és minden feloldás naplózva van.</li>
+    <li><b>Igazságos, véletlen húzás, ami tiszteletben tartja a család kéréseit</b>: a párok ne húzzák egymást, ne ismétlődjön
+      a tavalyi, kisgyerekeknek és nagyszülőknek rögzített párok, több húzás párhuzamosan.</li>
+    <li><b>Jó ajándékok telefonálgatás nélkül</b>: mindenki megadhat néhány ajándékötletet a kereten belül, és a titkos
+      Mikulása mindig naprakész.</li>
+    <li><b>Mindenki részt vehessen</b>, az is, akinek nincs e-mailje vagy nem internetezik — segítőkön keresztül.</li>
+    <li><b>Legyen ünnepi hangulata</b>: képeslapok az Északi-sarkról, magyarul vagy angolul, minden évben új dizájnnal.</li>
+  </ol>
+  <h3>Tartalom</h3>
+  <ol class="toc">
+    <li><a href="#people">Emberek: résztvevők, segítők, csoportok</a></li>
+    <li><a href="#admins">Adminok</a></li>
+    <li><a href="#draws">Húzások</a></li>
+    <li><a href="#rules">A húzás szabályai</a></li>
+    <li><a href="#reshuffle">Ha a lista a húzás után változik</a></li>
+    <li><a href="#mail">Mit kapnak a résztvevők</a></li>
+    <li><a href="#page">A személyes oldal</a></li>
+    <li><a href="#ideas">Ajándékötletek</a></li>
+    <li><a href="#digest">A napi összefoglaló</a></li>
+    <li><a href="#design">Képeslap-dizájn és nyelv</a></li>
+    <li><a href="#secrecy">Titoktartás és adatvédelem</a></li>
+    <li><a href="#limits">Korlátok, amikről jó tudni</a></li>
+    <li><a href="#adminlang">Az admin felület nyelve</a></li>
+  </ol>
+</section>
+
+<section class="card" id="people">
+  <h2>1 · Emberek: résztvevők, segítők, csoportok</h2>
+  <h3>Résztvevők</h3>
+  <ul>
+    <li>Mindenki, aki részt vehet egy húzásban, <b>résztvevő</b>: van neve, e-mail-címe és képeslapnyelve
+      (alapból magyar, vagy angol).</li>
+    <li>Aki egy korábbi húzásban részt vett, azt a törlés <b>archiválja</b>: az előzményei megmaradnak, de új húzásokba
+      nem kerül be. Akit még sosem húztak, az véglegesen törlődik. Archivált résztvevő szerkesztéssel visszaállítható.</li>
+  </ul>
+  <h3>Segítők (akiknek nincs e-mailjük)</h3>
+  <div class="rule">Akinek nincs e-mail-címe, annak kell egy <b>segítő</b>: egy másik résztvevő, akinek van saját e-mailje.</div>
+  <ul>
+    <li>Az illető összes levele — meghívó, képeslap, napi összefoglaló — a segítőhöz megy, jól láthatóan jelölve:
+      „&lt;név&gt; részére”. A segítő a levélben lévő linken az ajándékötleteit is kezeli.</li>
+    <li>Segítő nem törölheti a saját e-mail-címét, amíg valakinek segít, és segítőnek nem lehet saját segítője.</li>
+    <li><b>Senki sem húzhatja a saját segítőjét — egyik húzásban sem.</b>
+      <span class="why">Miért: a segítő olvassa az illető képeslapját, így különben megtudná, ki a saját titkos Mikulása.
+      Ez az egyetlen húzási szabály, ami minden húzásra érvényes.</span></li>
+  </ul>
+  <h3>Csoportok</h3>
+  <ul>
+    <li>A csoportok elnevezett, újrahasznosítható névsorok („Szűk család”, „Unokatestvérek”). Bárki tetszőleges számú csoportban lehet.</li>
+    <li>A csoport csak kiindulópont: a húzás a létrehozásakor átmásolja a csoport tagjait, vagy a
+      <b>Csoport gyors hozzáadása</b> gombbal. A csoport későbbi módosítása vagy törlése nem változtat a meglévő húzásokon.</li>
+  </ul>
+</section>
+
+<section class="card" id="admins">
+  <h2>2 · Adminok</h2>
+  <ul>
+    <li>Legfeljebb <b>5 admin</b> lehet. Az első admin a beállításkor jön létre, kötelező és nem törölhető; bármelyik admin
+      hozzáadhatja vagy eltávolíthatja a többit.</li>
+    <li>Az adminok <b>jelszóval</b>, <b>Google-fiókkal</b> vagy mindkettővel lépnek be. A Google-belépés csak olyan ellenőrzött
+      Google-címet fogad el, amely adminként szerepel; a többit elutasítja, és a próbálkozást naplózza.</li>
+    <li>A belépés az utolsó művelettől számított 30 percig érvényes.</li>
+    <li>Az adminok kezelik a résztvevőket, csoportokat, húzásokat, szabályokat, dizájnokat és a küldést — de <b>nem látják,
+      ki kit húzott</b>.</li>
+    <li>Egy húzás <b>párjainak feloldásához</b> friss megerősítés kell (a jelszó újbóli beírása, vagy egy új Google-belépés,
+      ami 2 percen belül egy feloldásra érvényes), és ez mindig bekerül a naplóba
+      <code>MATCHES REVEALED</code> (párok feloldva) bejegyzésként, amit minden admin lát.</li>
+    <li>Minden változás (résztvevők, szabályok, húzások, dizájn, küldés, ajándékötletek admin általi szerkesztése) megjelenik a <b>📜 Napló</b> fülön.</li>
+    <li><b>Nincs jelszó-visszaállítás</b>: a párok az adminok jelszavával vannak titkosítva, ezért legyen tartaléknak egy második admin.</li>
+  </ul>
+</section>
+
+<section class="card" id="draws">
+  <h2>3 · Húzások</h2>
+  <ul>
+    <li>Egy <b>húzás</b> egy naptári év és egy nem kötelező név, pl. <i>2026 · Szűk család</i>, <i>2026 · Mindenki</i>,
+      <i>2026 · Szerencsés hatos</i>. Bármennyi húzás futhat egymás mellett; egy éven belül a nevek egyediek.</li>
+    <li>Minden húzásnak saját résztvevői, párjai, szabályai, rögzített párjai, ajándékkerete, ajándékozási időpontja, Mikulás-üzenete,
+      képeslap-dizájnja, képeslapjai, linkjei, ajándékötletei és összefoglalói vannak. Aki két húzásban is benne van, két
+      képeslapot kap, és mindegyiken szerepel a húzás neve.</li>
+    <li><b>Kik vesznek részt</b> egy új húzásban: ugyanazok, mint a tavalyi azonos nevű húzásban; mindenki; egy csoport;
+      véletlenszerűen <i>N</i> ember (egy csoportból vagy mindenkiből); vagy egyelőre senki. A lista bármikor módosítható.</li>
+    <li>Az új húzás a tavalyi <b>azonos nevű</b> húzás keretét, üzenetét, szabálykapcsolóit, dizájnját és
+      „ne húzzák egymást” párjait örökli.</li>
+    <li>A húzás törlése eltávolítja a résztvevőlistát, a párokat, a linkeket, az ajándékötleteket és a szabályokat. Nem vonható vissza.</li>
+  </ul>
+</section>
+
+<section class="card" id="rules">
+  <h2>4 · A húzás szabályai</h2>
+  <p>Minden húzás ezeket a szabályokat követi. Ha nem teljesíthető mind egyszerre, az alkalmazás <b>nem húz</b>, és ezt
+    jelzi — sosem szeg meg csendben egy szabályt.</p>
+  <ol>
+    <li class="rule"><b>Mindenkinek egy.</b> A húzásban mindenki pontosan egy ajándékot ad és egyet kap. Senki sem húzhatja saját magát.</li>
+    <li class="rule"><b>Ne húzzák egymást</b> (húzásonként). A húzás oldalán megadott párok nem húzhatják egymást, egyik irányban sem.
+      Ezek <b>csak arra a húzásra</b> érvényesek: egy pár az egyik húzásban kizárható, a másikban megengedett.
+      A <b>Szabályok másolása másik húzásból</b> szándékosan hozzáadja egy másik húzás párjait; sosem töröl egyet sem.</li>
+    <li class="rule"><b>Nem a saját segítőd</b> (minden húzásban, lásd <a href="#people">segítők</a>).</li>
+    <li class="rule"><b>Nincs ismétlés tavalyról</b> (húzásonként kapcsolható, alapból bekapcsolva). Senki sem kaphatja ugyanazt,
+      akit a tavalyi, <b>azonos nevű</b>, ténylegesen kihúzott húzásban.</li>
+    <li class="rule"><b>Nem ugyanaz a megajándékozott két húzásban</b> (húzásonként kapcsolható, alapból bekapcsolva). Senki sem kaphatja
+      ugyanazt, akit ugyanazon naptári év egy másik, már kihúzott húzásában.</li>
+    <li class="rule"><b>Rögzített párok</b> (húzásonként). Egy admin kézzel megadhatja, hogy „A ajándékoz B-nek”, pl. Nagyi → a kis Peti.
+      A rögzített pár <b>minden más szabályt felülír</b>: A csak B-t húzhatja, és B-t más nem húzhatja. Egy húzásban mindenki
+      legfeljebb egy rögzített pár ajándékozója és legfeljebb egy megajándékozottja lehet. A rögzített párokat minden admin látja.</li>
+  </ol>
+  <p><b>Véletlenszerűség:</b> a szabályoknak megfelelő összes kiosztás közül mindegyik egyformán valószínű. Ha a véletlen
+    próbálkozások nem találnak ilyet, egy teljes keresés dönti el, létezik-e egyáltalán érvényes kiosztás.</p>
+  <p>A húzás <b>után</b> módosított szabályok és rögzített párok a következő újrasorsolásnál lépnek életbe.</p>
+</section>
+
+<section class="card" id="reshuffle">
+  <h2>5 · Ha a lista a húzás után változik</h2>
+  <ul>
+    <li>Ha egy már kihúzott húzáshoz embereket adnak hozzá vagy vesznek el, <b>nem küldhető képeslap</b>, amíg egy admin
+      meg nem erősíti, kiket kell újrasorsolni.</li>
+    <li>Az admin választhatja a <b>Mindenki újrasorsolását</b> (teljesen új húzás), vagy bejelöli, kik kapjanak új
+      megajándékozottat. A többiek megtartják a sajátjukat — hasznos, ha az ajándékok már megvannak.</li>
+    <li>Mindig automatikusan bekerülnek: az <b>újonnan érkezők</b>; akiknek <b>a megajándékozottja kilépett</b>; akiknek a párja <b>most már szabályt sért</b>.</li>
+    <li>Az utóbbi két csoport <b>láthatatlanul</b> kerül be, ugyanannyi véletlenszerűen választott <b>csali</b> közé keverve
+      (plusz egy pótlással, ha az admin épp valamelyiküket jelöli be), így az újrasorsolásból nem derül ki, ki kinek
+      ajándékozott. Az admin csak egy számot lát.</li>
+    <li>Ha a kiválasztott kör így sem oldható meg, az alkalmazás további véletlenszerű embereket vesz hozzá, amíg meg nem oldható.</li>
+    <li>Mindenki, akit újrasorsoltak, friss, <b>„Frissített képeslap”</b> jelölésű lapot kap — akkor is, ha véletlenül ugyanazt
+      húzza újra —, így az „el nem küldött” lista semmit sem árul el. A régi linkje megszűnik.</li>
+  </ul>
+</section>
+
+<section class="card" id="mail">
+  <h2>6 · Mit kapnak a résztvevők</h2>
+  <p>Minden e-mail <b>egyetlen emberhez</b> megy (nincs másolat/titkos másolat). Akinek nincs e-mailje, annak a levele a
+    segítőjéhez megy, „&lt;név&gt; részére” jelöléssel. Ha a húzásnak van neve, az a tárgyban és a képeslapon is szerepel.</p>
+  <table class="t">
+    <tr><th>E-mail</th><th>Mikor</th><th>Mi van benne</th></tr>
+    <tr><td><b>✉️ Kívánságlista-meghívó</b> (nem kötelező)</td>
+      <td>A húzás előtt, amikor egy admin elküldi. Alapból csak azok kapják, akiknek még nincs linkjük; képeslap-linket sosem cserél le.</td>
+      <td>Egy személyes link az ajándékötletek megadásához, és az ajándékkeret. Pár még nincs — semmit sem húztunk ki.</td></tr>
+    <tr><td><b>📮 Képeslap</b></td>
+      <td>A húzás után, amikor egy admin elküldi (az összes függőt egyszerre, vagy egy embernek). Újraküldhető.</td>
+      <td>A megajándékozottad neve és aktuális ajándékötletei, a keret, az ajándékozás időpontja, a Mikulás üzenete, egy gomb a
+        személyes oldaladra, és egy link, amivel a lapot a másik nyelven olvashatod. A <b>tárgy sosem árulja el a megajándékozott nevét</b>,
+        mert a tárgy a lezárt képernyőn is látszik.</td></tr>
+    <tr><td><b>📬 Napi összefoglaló</b></td>
+      <td>Legfeljebb naponta egyszer (lásd <a href="#digest">összefoglaló</a>).</td>
+      <td>Mi változott a megajándékozottad kívánságlistáján: új ötletek, már nem aktuális ötletek (az okkal), a jelenlegi lista, a keret.</td></tr>
+  </table>
+  <h3>Linkek</h3>
+  <ul>
+    <li>Mindenkinek <b>húzásonként egy személyes linkje</b> van. A képeslap linkje lecseréli a meghívóét; a képeslap újraküldése
+      új linket készít, és a régi megszűnik („ez a link már nem érvényes”).</li>
+    <li>Aki megkapja a linket, látja az illető párját — akárcsak a képeslapon —, ezért a linket nem szabad továbbküldeni.</li>
+  </ul>
+</section>
+
+<section class="card" id="page">
+  <h2>7 · A személyes oldal (belépés nélkül)</h2>
+  <ul>
+    <li>Jól láthatóan mutatja az <b>ajándékkeretet</b>, az ajándékozás időpontját, a megajándékozottat és az ő ajándékötleteit
+      (a már nem aktuális ötletek áthúzva, az okkal).</li>
+    <li>Itt kezelheti mindenki a <b>saját ajándékötleteit</b> (<a href="#ideas">szabályok</a>), és
+      <b>átmásolhatja az ötleteit egy másik húzásból</b>, amiben szintén részt vesz.</li>
+    <li>Itt <b>válthat képeslapnyelvet</b>, és kérheti, hogy a lapot az új nyelven újra megkapja.</li>
+    <li>A húzás előtt (meghívó-link) csak az ötleteket mutatja, azzal a megjegyzéssel, hogy a képeslap később érkezik.</li>
+    <li>A húzás képeslap-dizájnját követi.</li>
+  </ul>
+</section>
+
+<section class="card" id="ideas">
+  <h2>8 · Ajándékötletek</h2>
+  <ul>
+    <li>Az ötletek <b>egy emberhez, egy húzáshoz</b> tartoznak. Legfeljebb <b>5</b> aktuális ötlet, mindegyikhez nem kötelező link.</li>
+    <li class="rule">Az az ötlet, amit az illető titkos Mikulása <b>még nem kapott meg</b> (nem volt a képeslapján vagy egy
+      összefoglalóban), egyszerűen <b>törölhető</b> — senki sem értesül róla.</li>
+    <li class="rule">Ha már megkapta, az ötlet nem törölhető, csak <b>már nem aktuális</b>-nak jelölhető, egy okkal:
+      már megkapta / van hasonló, már nem szeretné, tévedésből került fel, vagy egyéb. A titkos Mikulás a következő összefoglalóban értesül róla.</li>
+    <li>Az áthúzott ötlet <b>visszaállítható</b>. Ha a titkos Mikulás már tudta, hogy nem aktuális, újként kapja meg ismét.</li>
+    <li>A <b>másolás másik húzásból</b> csak az aktuális ötleteket hozza át, kihagyja a listán már szereplőket
+      (kis- és nagybetűtől függetlenül), betartja az 5-ös korlátot, és ennek a húzásnak a titkos Mikulása számára újnak számít.</li>
+    <li><b>Az adminok bárki ötleteit szerkeszthetik</b> (pl. kisgyerekekét vagy nagyszülőkét), pontosan ugyanezekkel a szabályokkal; minden szerkesztés naplózva van.</li>
+    <li>Ha valakinek újrasorsoláskor megváltozik a titkos Mikulása, az új még semmit sem látott: az ötletei ismét
+      el nem küldöttnek számítanak, az áthúzottak pedig elmaradnak.</li>
+  </ul>
+</section>
+
+<section class="card" id="digest">
+  <h2>9 · A napi összefoglaló</h2>
+  <ul>
+    <li>Az ötletek változásait az alkalmazás összegyűjti, és <b>naponta egy e-mailben</b> küldi el <b>az illető titkos Mikulásának</b>,
+      alapból budapesti idő szerint 18:00 után.</li>
+    <li>Csak azután, hogy az a titkos Mikulás megkapta a képeslapját (addig maga a képeslap sorolja fel az ötleteket).</li>
+    <li>Sosem ismétel olyat, amiről a titkos Mikulás már értesült. Ha semmi sem változott, nem megy levél.</li>
+    <li>Újrasorsolás után az illető <b>új</b> titkos Mikulásához megy.</li>
+    <li>Az adminok látják, hány frissítés vár, és megnyomhatják az <b>Összefoglaló küldése most</b> gombot.</li>
+  </ul>
+</section>
+
+<section class="card" id="design">
+  <h2>10 · Képeslap-dizájn és nyelv</h2>
+  <ul>
+    <li>Minden húzásnak saját dizájnja van: alaptéma, kiemelő szín, betűtípus, téma-állat (akár Mikulás-sapkában) és
+      díszítések, mentés előtt előnézettel. A képeslap, a meghívó, az összefoglaló és a személyes oldal is ezt követi.</li>
+    <li>A képeslapok <b>alapból magyarok</b>; bármelyik résztvevő átállítható angolra, admin által vagy saját maga.</li>
+    <li>Az adminok által írt szövegek (keret, ajándékozás időpontja, Mikulás-üzenet, húzás neve) minden nyelven pontosan úgy jelennek meg, ahogy beírták őket.</li>
+  </ul>
+</section>
+
+<section class="card" id="secrecy">
+  <h2>11 · Titoktartás és adatvédelem</h2>
+  <ul>
+    <li>A párokat az alkalmazás <b>titkosítva</b> tárolja. Az adatbázisfájlból önmagában nem derül ki, ki kit húzott. (A küldésre
+      váró összefoglalókat egy külön szerverkulcs védi; ezt a kulcsot az adatmappán kívül kell tartani, ahogy a README leírja.)</li>
+    <li>A képeslapok és összefoglalók küldésekor a gombot megnyomó admin nem látja a tartalmat.</li>
+    <li>A személyes linkeket csak ujjlenyomatként tárolja; a szerver nem tudja újra előállítani őket.</li>
+    <li>Az összefoglaló címzéséhez a szerver csak abban a pillanatban találja meg valakinek a titkos Mikulását, amikor az
+      illető (vagy egy admin) módosítja az ötleteit; ez titkosítva tárolódik, amíg az összefoglaló el nem megy.</li>
+    <li>Az ajándékötletek, a résztvevők nevei és e-mail-címei <b>nem</b> titkosak és nincsenek titkosítva.</li>
+  </ul>
+</section>
+
+<section class="card" id="limits">
+  <h2>12 · Korlátok, amikről jó tudni</h2>
+  <ul>
+    <li><b>Levélmásolatok:</b> a küldő fiók „Elküldött” mappája vagy egy levelezőszolgáltatás naplója (pl. Resend) minden
+      képeslapot tartalmaz. Ehhez ne férjen hozzá olyan, akinek nem szabad tudnia a párokat.</li>
+    <li><b>Közös postafiókok és segítők</b> látják a nekik érkező lapokat — a segítőknél ez szándékos.</li>
+    <li><b>Kis húzások:</b> nagyon kevés embernél az újrasorsolás csalijai kevésbé takarnak; 3–4 embernél kitalálható.</li>
+    <li><b>Képek az e-mailekben</b>: az alkalmazás címéről töltődnek be; egyes levelezők csak a „képek megjelenítése” után mutatják őket.</li>
+    <li><b>A levelezők eltérnek:</b> az Outlook leegyszerűsíti a lap keretét; az androidos Gmail a saját betűtípusait használja.</li>
+  </ul>
+</section>
+
+<section class="card" id="adminlang">
+  <h2>13 · Az admin felület nyelve</h2>
+  <ul>
+    <li>Az admin felület a fejlécben lévő <b>HU | EN</b> kapcsolóval magyarra vagy angolra állítható. A választást a böngésző
+      megjegyzi; először a böngésző nyelvét követi.</li>
+    <li>Ez csak az admin felületet és ezt az útmutatót érinti. A résztvevők leveleinek nyelve résztvevőnként állítható
+      (<a href="#design">képeslap-dizájn és nyelv</a>).</li>
+    <li>A napló bejegyzései angol kulcsszavakkal tárolódnak (pl. <code>MATCHES REVEALED</code>), a felület magyarul jeleníti meg őket.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

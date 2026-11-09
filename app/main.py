@@ -524,47 +524,72 @@ def delete_member(member_id: int, s: Session = Depends(current)):
     return {"archived": bool(used)}
 
 
-# ─── Exclusions (e.g. couples never draw each other) ───────────────────────
+# ─── Exclusions, per draw (e.g. couples never draw each other) ─────────────
+# Each draw has its own list, so a pair can be excluded in one draw and allowed
+# in another. New draws copy the list of last year's draw with the same name.
 
-@app.get("/api/exclusions")
-def list_exclusions(s: Session = Depends(current)):
+class CopyRulesIn(BaseModel):
+    draw: int
+
+
+@app.get("/api/years/{year}/exclusions")
+def list_exclusions(year: int, s: Session = Depends(current)):
     with db.connect() as conn:
+        _year_or_404(conn, year)
         rows = conn.execute(
-            "SELECT e.a_id, e.b_id, a.name AS a_name, b.name AS b_name FROM exclusions e "
-            "JOIN members a ON a.id = e.a_id JOIN members b ON b.id = e.b_id ORDER BY a.name COLLATE NOCASE"
-        ).fetchall()
+            "SELECT e.a_id, e.b_id, a.name AS a_name, b.name AS b_name FROM draw_exclusions e "
+            "JOIN members a ON a.id = e.a_id JOIN members b ON b.id = e.b_id WHERE e.year = ? "
+            "ORDER BY a.name COLLATE NOCASE, b.name COLLATE NOCASE", (year,)).fetchall()
     return [dict(r) for r in rows]
 
 
-@app.post("/api/exclusions")
-def add_exclusion(body: ExclusionIn, s: Session = Depends(current)):
+@app.post("/api/years/{year}/exclusions")
+def add_exclusion(year: int, body: ExclusionIn, s: Session = Depends(current)):
     a, b = sorted((body.a_id, body.b_id))
     if a == b:
         raise HTTPException(422, "Pick two different people.")
     with db.connect() as conn:
+        y = _year_or_404(conn, year)
         names = _names(conn, [a, b])
         if len(names) != 2:
             raise HTTPException(404, "Unknown member.")
-        conn.execute("INSERT OR IGNORE INTO exclusions (a_id, b_id) VALUES (?, ?)", (a, b))
-        db.audit(conn, s.admin_name, "exclusion added", f"{names[a]} ↔ {names[b]}")
+        conn.execute("INSERT OR IGNORE INTO draw_exclusions (year, a_id, b_id) VALUES (?, ?, ?)", (year, a, b))
+        db.audit(conn, s.admin_name, "exclusion added", f"{_label(y)}: {names[a]} ↔ {names[b]}")
     return {"ok": True}
 
 
-@app.delete("/api/exclusions/{a_id}/{b_id}")
-def delete_exclusion(a_id: int, b_id: int, s: Session = Depends(current)):
+@app.delete("/api/years/{year}/exclusions/{a_id}/{b_id}")
+def delete_exclusion(year: int, a_id: int, b_id: int, s: Session = Depends(current)):
     a, b = sorted((a_id, b_id))
     with db.connect() as conn:
+        y = _year_or_404(conn, year)
         names = _names(conn, [a, b])
-        conn.execute("DELETE FROM exclusions WHERE a_id = ? AND b_id = ?", (a, b))
-        db.audit(conn, s.admin_name, "exclusion removed", f"{names.get(a, '?')} ↔ {names.get(b, '?')}")
+        conn.execute("DELETE FROM draw_exclusions WHERE year = ? AND a_id = ? AND b_id = ?", (year, a, b))
+        db.audit(conn, s.admin_name, "exclusion removed", f"{_label(y)}: {names.get(a, '?')} ↔ {names.get(b, '?')}")
     return {"ok": True}
+
+
+@app.post("/api/years/{year}/exclusions/copy")
+def copy_exclusions(year: int, body: CopyRulesIn, s: Session = Depends(current)):
+    """Add another draw's 'never draw each other' pairs to this draw (keeps existing ones)."""
+    with db.connect() as conn:
+        y = _year_or_404(conn, year)
+        src = _year_or_404(conn, body.draw)
+        if body.draw == year:
+            raise HTTPException(422, "Pick another draw.")
+        before = conn.execute("SELECT COUNT(*) FROM draw_exclusions WHERE year = ?", (year,)).fetchone()[0]
+        conn.execute("INSERT OR IGNORE INTO draw_exclusions (year, a_id, b_id) "
+                     "SELECT ?, a_id, b_id FROM draw_exclusions WHERE year = ?", (year, body.draw))
+        added = conn.execute("SELECT COUNT(*) FROM draw_exclusions WHERE year = ?", (year,)).fetchone()[0] - before
+        db.audit(conn, s.admin_name, "exclusions copied", f"{_label(src)} → {_label(y)}: {added} added")
+    return {"added": added}
 
 
 def _forbidden(conn, key: bytes, year: int) -> draw.Forbidden:
-    """Who may not draw whom in ``year``: exclusions both ways, plus (if the
-    year says so) each person's match from the most recent earlier draw."""
+    """Who may not draw whom in this draw: its own exclusions (both ways), the
+    helper rule, and (if the draw says so) last year's / parallel draws' matches."""
     out: draw.Forbidden = {}
-    for r in conn.execute("SELECT a_id, b_id FROM exclusions"):
+    for r in conn.execute("SELECT a_id, b_id FROM draw_exclusions WHERE year = ?", (year,)):
         out.setdefault(r["a_id"], set()).add(r["b_id"])
         out.setdefault(r["b_id"], set()).add(r["a_id"])
     # Someone without e-mail never draws their own helper: the helper reads their
@@ -708,6 +733,10 @@ def _create_draw(conn, s: Session, cal_year: int, name: str, source: str, group_
         (draw_id, cal_year, name, prev["budget"] if prev else "", prev["note"] if prev else "",
          prev["avoid_repeat"] if prev else 1, prev["avoid_parallel"] if prev else 1, prev["theme"] if prev else "", db.now()),
     )
+    same_named = _previous_draw(conn, probe)
+    if same_named is not None:  # rules follow the draw's "series", never other draws
+        conn.execute("INSERT OR IGNORE INTO draw_exclusions (year, a_id, b_id) "
+                     "SELECT ?, a_id, b_id FROM draw_exclusions WHERE year = ?", (draw_id, same_named["year"]))
     active = "SELECT id FROM members WHERE archived = 0"
     if source == "previous":
         same = _previous_draw(conn, probe)

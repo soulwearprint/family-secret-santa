@@ -158,3 +158,56 @@ def test_copy_gift_ideas_from_another_draw(fam, tmp_path):
     out = ok(c.post(f"/api/years/{small}/wishes/{ids['Bela']}/copy", json={"draw": big}))
     assert out["copied"] == 3 and out["skipped"] == 1
     assert len([x for x in out["wishes"] if not x["obsolete"]]) == 5
+
+
+def test_exclusions_are_per_draw(fam):
+    c, ids = fam
+    a, b = ids["Anna"], ids["Bela"]
+    circle = ok(c.post("/api/draws", json={"cal_year": 2026, "name": "Circle", "source": "none"}))["year"]
+    big = ok(c.post("/api/draws", json={"cal_year": 2026, "name": "Everyone", "source": "none"}))["year"]
+    # small 4-person draws, so an Anna/Bela pairing turns up often when it is allowed
+    for d in (circle, big):
+        ok(c.put(f"/api/years/{d}/participants", json={"member_ids": [a, b, ids["Csilla"], ids["Dani"]]}))
+        ok(c.put(f"/api/years/{d}", json={"budget": "", "exchange_date": "", "note": "", "avoid_parallel": False}))
+    ok(c.post(f"/api/years/{circle}/exclusions", json={"a_id": a, "b_id": b}))
+    assert ok(c.get(f"/api/years/{big}/exclusions")) == []  # no spill-over
+
+    seen_ab_in_big = False
+    for _ in range(30):
+        ok(c.post(f"/api/years/{circle}/draw", json={"everyone": True, "confirm": True}))
+        ok(c.post(f"/api/years/{big}/draw", json={"everyone": True, "confirm": True}))
+        pc, pb = reveal(c, circle), reveal(c, big)
+        assert pc["Anna"] != "Bela" and pc["Bela"] != "Anna"
+        seen_ab_in_big |= pb["Anna"] == "Bela" or pb["Bela"] == "Anna"
+    assert seen_ab_in_big  # allowed (and happens) in the other draw
+
+    # copying rules from another draw is explicit, and only adds
+    ok(c.post(f"/api/years/{big}/exclusions", json={"a_id": ids["Csilla"], "b_id": ids["Dani"]}))
+    assert ok(c.post(f"/api/years/{big}/exclusions/copy", json={"draw": circle}))["added"] == 1
+    assert {(x["a_name"], x["b_name"]) for x in ok(c.get(f"/api/years/{big}/exclusions"))} == {("Anna", "Bela"), ("Csilla", "Dani")}
+    assert c.post(f"/api/years/{big}/exclusions/copy", json={"draw": big}).status_code == 422
+    ok(c.delete(f"/api/years/{big}/exclusions/{b}/{a}"))  # order doesn't matter
+    assert len(ok(c.get(f"/api/years/{big}/exclusions"))) == 1
+
+    # next year's "Circle" inherits Circle's rules only
+    nxt = ok(c.post("/api/draws", json={"cal_year": 2027, "name": "Circle", "source": "previous"}))["year"]
+    assert [(x["a_name"], x["b_name"]) for x in ok(c.get(f"/api/years/{nxt}/exclusions"))] == [("Anna", "Bela")]
+    other = ok(c.post("/api/draws", json={"cal_year": 2027, "name": "New one", "source": "none"}))["year"]
+    assert ok(c.get(f"/api/years/{other}/exclusions")) == []
+
+
+def test_old_global_exclusions_are_migrated_into_every_draw(tmp_path, monkeypatch):
+    import sqlite3
+    monkeypatch.setenv("SANTA_DB", str(tmp_path / "m.db"))
+    from app import db
+    db.init()
+    conn = sqlite3.connect(tmp_path / "m.db")
+    conn.execute("INSERT INTO members (id, name, email, created_at) VALUES (1,'A','a@x.y',''),(2,'B','b@x.y','')")
+    conn.execute("INSERT INTO years (year, cal_year, name, created_at) VALUES (2025, 2025, '', ''), (2026, 2026, '', '')")
+    conn.execute("INSERT INTO exclusions (a_id, b_id) VALUES (1, 2)")  # a pre-upgrade global rule
+    conn.commit()
+    db.init()  # the next start migrates it
+    assert sorted(conn.execute("SELECT year, a_id, b_id FROM draw_exclusions").fetchall()) == [(2025, 1, 2), (2026, 1, 2)]
+    assert conn.execute("SELECT COUNT(*) FROM exclusions").fetchone()[0] == 0
+    db.init()  # idempotent
+    assert conn.execute("SELECT COUNT(*) FROM draw_exclusions").fetchone()[0] == 2

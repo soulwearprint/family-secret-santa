@@ -150,7 +150,7 @@ function memberBody(form) {
   return b;
 }
 async function viewFamily() {
-  const [members, exclusions, groups] = await Promise.all([api("/api/members"), api("/api/exclusions"), api("/api/groups")]);
+  const [members, groups] = await Promise.all([api("/api/members"), api("/api/groups")]);
   const active = members.filter((m) => !m.archived), archived = members.filter((m) => m.archived);
   const rowHtml = (m) => `<tr>
       <td>${esc(m.name)}</td><td>${m.email ? esc(m.email)
@@ -177,19 +177,9 @@ async function viewFamily() {
     </section>
     <section class="card">
       <h2>💑 Never draw each other</h2>
-      <p class="hint">People with a helper automatically never draw their helper — otherwise the helper, who reads their postcard, would learn who their own Secret Santa is.</p>
-      <p class="muted">For couples (or anyone who shouldn't draw each other). Works both ways, every year.</p>
-      <form id="excl" class="row">
-        <div><label>Person</label><select name="a">${active.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("")}</select></div>
-        <div><label>and</label><select name="b">${active.map((m, i) => `<option value="${m.id}" ${i === 1 ? "selected" : ""}>${esc(m.name)}</option>`).join("")}</select></div>
-        <button class="secondary">Add rule</button>
-      </form>
-      <div class="err" id="exerr"></div>
-      <table style="margin-top:10px"><tbody>
-        ${exclusions.map((x) => `<tr><td>${esc(x.a_name)} ↔ ${esc(x.b_name)}</td>
-          <td style="text-align:right"><button class="small secondary" data-unex="${x.a_id}-${x.b_id}">Remove</button></td></tr>`).join("")
-          || `<tr><td class="muted">No rules yet.</td></tr>`}
-      </tbody></table>
+      <p class="hint">These rules are now set <b>per draw</b> (on each draw's page), so a pair can be excluded in one draw and
+        allowed in another. People with a helper never draw their helper in any draw — otherwise the helper, who reads
+        their postcard, would learn who their own Secret Santa is.</p>
     </section>`;
   // ── groups ──
   const nameOf = (id) => members.find((m) => m.id === id)?.name || "?";
@@ -222,16 +212,6 @@ async function viewFamily() {
     const r = await dialog(`<h2>Delete group “${esc(g.name)}”?</h2><p>Draws already created from it keep their people.</p>`,
       [{ label: "Cancel", value: "", cls: "secondary" }, { label: "Delete", value: "del" }]);
     if (r.action === "del") { await api(`/api/groups/${g.id}`, { method: "DELETE" }); viewFamily(); }
-  }));
-  $("#excl").onsubmit = async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    try { await api("/api/exclusions", { method: "POST", body: { a_id: +f.get("a"), b_id: +f.get("b") } }); viewFamily(); }
-    catch (err) { $("#exerr").textContent = err.message; }
-  };
-  document.querySelectorAll("[data-unex]").forEach((b) => (b.onclick = async () => {
-    const [a, c] = b.dataset.unex.split("-");
-    await api(`/api/exclusions/${a}/${c}`, { method: "DELETE" }); viewFamily();
   }));
   $("#add").onsubmit = async (e) => {
     e.preventDefault();
@@ -397,8 +377,11 @@ document.addEventListener("change", (e) => {
 });
 
 async function renderYear() {
-  const [y, members, digest, fixed, groups] = await Promise.all([api(`/api/years/${state.year}`), api("/api/members"),
-    api("/api/digest"), api(`/api/years/${state.year}/fixed`), api("/api/groups")]);
+  const [y, members, digest, fixed, groups, excl, allDraws] = await Promise.all([api(`/api/years/${state.year}`), api("/api/members"),
+    api("/api/digest"), api(`/api/years/${state.year}/fixed`), api("/api/groups"), api(`/api/years/${state.year}/exclusions`),
+    api("/api/years")]);
+  const otherDraws = allDraws.filter((d) => d.year !== state.year);
+  state.label = y.label;
   const inYear = new Set(y.participants.map((p) => p.id));
   const choosable = members.filter((m) => !m.archived || inYear.has(m.id));
   const pending = y.participants.filter((p) => p.has_match && !p.notified_at).length;
@@ -408,7 +391,7 @@ async function renderYear() {
   const invitedN = y.participants.filter((p) => p.invited).length;
   const ideasN = y.participants.filter((p) => p.wishes).length;
   if (!y.drawn) {
-    statusHtml = `<div class="banner info">Names have not been drawn yet for ${y.year}.
+    statusHtml = `<div class="banner info">Names have not been drawn yet for ${esc(y.label)}.
       ${invitedN ? `<br>✉️ ${invitedN} of ${y.participants.length} invited to add gift ideas · 🎁 ${ideasN} have added some.` : ""}</div>
       <p class="hint">Tip: invite everyone to add gift ideas first, so the postcards can already list their giftee's ideas.
         Set the gift budget below before inviting — it is shown in the invitation.</p>
@@ -435,6 +418,24 @@ async function renderYear() {
     <section class="card">
       <h2>🎄 ${esc(y.label)}</h2>
       ${statusHtml}
+    </section>
+
+    <section class="card">
+      <h2>💑 Never draw each other</h2>
+      <p class="hint">Rules for <b>this draw only</b> — they don't affect your other draws. Works both ways.
+        Last year's draw with the same name passes its rules on to a new one. A rule added after the draw applies at the next reshuffle.</p>
+      <form id="excl" class="row">
+        <div><label>Person</label><select name="a">${y.participants.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select></div>
+        <div><label>and</label><select name="b">${y.participants.map((p, i) => `<option value="${p.id}" ${i === 1 ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+        <button class="secondary">Add rule</button>
+      </form>
+      <div class="err" id="exerr"></div>
+      <table style="margin-top:8px"><tbody>${excl.map((x) => `<tr><td>${esc(x.a_name)} ↔ ${esc(x.b_name)}</td>
+        <td style="text-align:right"><button class="small secondary" data-unex="${x.a_id}-${x.b_id}">Remove</button></td></tr>`).join("")
+        || `<tr><td class="muted">No rules in this draw.</td></tr>`}</tbody></table>
+      ${otherDraws.length ? `<div class="row" style="margin-top:10px"><div><label>Copy rules from another draw</label>
+        <select id="excopy">${otherDraws.map((d) => `<option value="${d.year}">${esc(d.label)}</option>`).join("")}</select></div>
+        <div style="flex:0 0 auto"><button class="small secondary" type="button" id="excopybtn">Copy</button></div></div>` : ""}
     </section>
 
     <section class="card">
@@ -511,7 +512,7 @@ async function renderYear() {
         <label style="display:flex;gap:8px;align-items:center;color:inherit;margin-top:6px">
           <input type="checkbox" name="avoid_parallel" style="width:auto" ${y.avoid_parallel ? "checked" : ""}>
           Nobody draws the same person as in another ${y.cal_year} draw</label>
-        <p class="hint">Rules apply to the next draw or reshuffle. "Never draw each other" pairs are in the Family tab.</p>
+        <p class="hint">Rules apply to the next draw or reshuffle. "Never draw each other" pairs for this draw are further up.</p>
         <div class="actions"><button class="secondary">Save details</button><span id="dmsg" class="hint"></span></div>
       </form>
       <p class="hint" style="margin-top:14px"><button class="small secondary" id="dely">Delete this draw</button></p>
@@ -533,6 +534,23 @@ async function renderYear() {
     document.querySelectorAll("#parts input[name=m]").forEach((i) => { if (g.member_ids.includes(+i.value)) i.checked = true; });
   };
   document.querySelectorAll("[data-wedit]").forEach((b) => (b.onclick = () => wishEditor(y, +b.dataset.wedit)));
+  $("#excl").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    try { await api(`/api/years/${y.year}/exclusions`, { method: "POST", body: { a_id: +f.get("a"), b_id: +f.get("b") } }); renderYear(); }
+    catch (err) { $("#exerr").textContent = err.message; }
+  };
+  document.querySelectorAll("[data-unex]").forEach((b) => (b.onclick = async () => {
+    const [a, c] = b.dataset.unex.split("-");
+    await api(`/api/years/${y.year}/exclusions/${a}/${c}`, { method: "DELETE" }); renderYear();
+  }));
+  if ($("#excopybtn")) $("#excopybtn").onclick = async () => {
+    try {
+      const res = await api(`/api/years/${y.year}/exclusions/copy`, { method: "POST", body: { draw: +$("#excopy").value } });
+      await renderYear();
+      $("#exerr").innerHTML = `<span class="ok" style="color:var(--green)">✓ ${res.added} rule(s) added.</span>`;
+    } catch (err) { $("#exerr").textContent = err.message; }
+  };
   $("#parts").onsubmit = async (e) => {
     e.preventDefault();
     const ids = [...e.target.querySelectorAll("input[name=m]:checked")].map((i) => +i.value);
@@ -643,7 +661,7 @@ async function sendPostcards(ids) {
 async function revealDialog() {
   const me = state.status.admin;
   const canGoogle = state.status.google_enabled && me.google_email;
-  const r = await dialog(`<h2>🔓 Unlock the matches for ${state.year}?</h2>
+  const r = await dialog(`<h2>🔓 Unlock the matches for ${esc(state.label || "this draw")}?</h2>
     <p>This shows who drew whom — the secret is spoiled for you. It is recorded in the log, visible to all admins.</p>
     ${canGoogle ? `<p>${googleBtn("Confirm with Google", `/auth/google/start?purpose=reveal&year=${state.year}`)}</p>` : ""}
     ${me.has_password ? `<label>${canGoogle ? "…or re-enter" : "Re-enter"} your password</label>
@@ -658,7 +676,7 @@ async function showReveal(body) {
   let pairs;
   try { pairs = await api(`/api/years/${state.year}/reveal`, { method: "POST", body }); }
   catch (err) { return alertBox(`<p class="err">${esc(err.message)}</p>`); }
-  await alertBox(`<h2>Matches ${state.year}</h2>
+  await alertBox(`<h2>Matches · ${esc(state.label || "this draw")}</h2>
     <table class="reveal"><thead><tr><th>Secret Santa</th><th>gives to</th></tr></thead><tbody>
     ${pairs.map((p) => `<tr><td>${esc(p.giver)}</td><td>${esc(p.receiver)}</td></tr>`).join("")}</tbody></table>`);
 }

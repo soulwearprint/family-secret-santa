@@ -10,13 +10,14 @@
   <header>
     <h1>🎅 Pereputty Angyalkázás</h1>
     <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <a href="/guide" target="_blank" rel="noopener" style="color:#fff;font-size:14px">📖 How it works</a>
+      <span id="langsw" class="langsw" role="group" aria-label="Language / Nyelv"></span>
+      <a id="guidelink" href="/guide" target="_blank" rel="noopener" style="color:#fff;font-size:14px">📖 How it works</a>
       <div id="who"></div>
     </div>
   </header>
 
   <main id="app">
-    <p class="muted">Loading…</p>
+    <p class="muted">Betöltés… / Loading…</p>
   </main>
 
   <dialog id="dlg">
@@ -26,6 +27,7 @@
     </form>
   </dialog>
 
+  <script src="/static/i18n.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

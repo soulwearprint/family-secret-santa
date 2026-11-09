@@ -11,9 +11,16 @@ their own postcard from the North Pole.
 
 Python 3.11+ · FastAPI · SQLite · no build step.
 
-**📖 How it works:** the app has a built-in guide at `/guide`, linked from the
-admin header. It describes the app's purpose and every rule for draws and for
-what participants receive.
+**📖 How it works:** the app has a built-in guide in English (`/guide`) and
+Hungarian (`/guide?lang=hu`), linked from the admin header. It describes the
+app's purpose and every rule for draws and for what participants receive.
+
+**🌐 Languages:** the admin panel switches between Hungarian and English with
+the **HU | EN** buttons in the header (remembered per browser; the first visit
+follows the browser language). Translations live in `app/static/i18n.js`, and
+`tests/test_i18n.py` fails if any admin text, server message, log action or
+design option lacks a Hungarian version. Participants' e-mails and personal
+pages have their own language, set per participant.
 
 ## Run it
 

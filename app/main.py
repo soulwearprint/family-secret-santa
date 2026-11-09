@@ -1711,6 +1711,12 @@ def participant_html(token: str):
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+@app.get("/guide", include_in_schema=False)
+def guide():
+    """How the app works and every rule it follows (public: contains nothing private)."""
+    return FileResponse(STATIC / "guide.html")
+
+
 @app.get("/", include_in_schema=False)
 def index():
     return FileResponse(STATIC / "index.html")

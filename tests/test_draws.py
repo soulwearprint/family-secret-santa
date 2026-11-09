@@ -211,3 +211,8 @@ def test_old_global_exclusions_are_migrated_into_every_draw(tmp_path, monkeypatc
     assert conn.execute("SELECT COUNT(*) FROM exclusions").fetchone()[0] == 0
     db.init()  # idempotent
     assert conn.execute("SELECT COUNT(*) FROM draw_exclusions").fetchone()[0] == 2
+
+
+def test_guide_page_is_public(client):
+    r = client.get("/guide")
+    assert r.status_code == 200 and "Draw rules" in r.text and "Purpose and goal" in r.text

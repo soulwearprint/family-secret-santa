@@ -72,7 +72,7 @@ function renderSetup() {
   $("#app").innerHTML = `
     <section class="card">
       <h2>Welcome! Create the first admin</h2>
-      <p class="muted">The first admin is mandatory. Admins manage the family list, run the draw,
+      <p class="muted">The first admin is mandatory. Admins manage the participants, run the draws,
       send the postcards and — only if really needed — can unlock who drew whom (every unlock is logged).
       You can add up to 4 more admins later.</p>
       ${state.status.google_setup ? `<p>${googleBtn("Set up with Google")}</p>
@@ -120,7 +120,7 @@ function renderLogin() {
 }
 
 /* ── Main shell ────────────────────────────────────────────────────────── */
-const TABS = { years: "🎁 Draws", design: "🎨 Card design", family: "👪 Family", admins: "🔑 Admins", log: "📜 Log" };
+const TABS = { years: "🎁 Draws", design: "🎨 Card design", family: "👥 Participants", admins: "🔑 Admins", log: "📜 Log" };
 
 function renderMain() {
   const modeBanner = state.status.mail_mode === "outbox"
@@ -161,7 +161,7 @@ async function viewFamily() {
       </td></tr>`;
   $("#view").innerHTML = `
     <section class="card">
-      <h2>Family members</h2>
+      <h2>Participants</h2>
       <form id="add" class="row">
         <div><label>Name</label><input name="name" required maxlength="80"></div>
         <div><label>E-mail (only this person should read it)</label><input name="email" type="email" placeholder="leave empty if they have none"></div>
@@ -342,7 +342,7 @@ async function viewYears() {
       <label>Who takes part</label>
       <select name="source" id="nsrc">
         <option value="previous">Same people as last year's draw with this name</option>
-        <option value="everyone">Everyone in the family list</option>
+        <option value="everyone">All participants</option>
         ${groups.length ? `<option value="group">A group…</option>` : ""}
         <option value="random">A random set of people…</option>
         <option value="none">Nobody yet (I'll tick them)</option>
@@ -460,7 +460,7 @@ async function renderYear() {
         <div style="flex:0 0 auto"><button class="small secondary" type="button" id="addgroupbtn">Tick its members</button></div></div>` : ""}
       <form id="parts">
         <div class="checks">${choosable.map((m) => `<label><input type="checkbox" name="m" value="${m.id}" ${inYear.has(m.id) ? "checked" : ""}>
-          ${esc(m.name)}</label>`).join("") || `<span class="muted">Add family members in the Family tab first.</span>`}</div>
+          ${esc(m.name)}</label>`).join("") || `<span class="muted">Add people in the Participants tab first.</span>`}</div>
         <div class="actions"><button class="secondary">Save participant list</button></div>
       </form>
     </section>

@@ -122,15 +122,15 @@ def test_rules_language_and_no_repeat(client, tmp_path):
     ids = add_people(c, names)
     ok(c.put(f"/api/members/{ids['Kata']}", json={"name": "Kata", "email": "kata@fam.test", "lang": "en"}))
     couples = [("Anna", "Bela"), ("Csilla", "Dani"), ("Eva", "Feri"), ("Gabi", "Hanna")]
-    for a, b in couples:
-        ok(c.post("/api/exclusions", json={"a_id": ids[a], "b_id": ids[b]}))
-    assert len(ok(c.get("/api/exclusions"))) == 4
-
     ok(c.post("/api/years", json={"year": 2025}))
+    for a, b in couples:
+        ok(c.post("/api/years/2025/exclusions", json={"a_id": ids[a], "b_id": ids[b]}))
+    assert len(ok(c.get("/api/years/2025/exclusions"))) == 4
     ok(c.post("/api/years/2025/draw", json={}))
     y25 = {p["giver"]: p["receiver"] for p in ok(c.post("/api/years/2025/reveal", json={"password": "secret1"}))}
     ok(c.post("/api/years", json={"year": 2026}))
     assert ok(c.get("/api/years/2026"))["avoid_repeat"] is True
+    assert len(ok(c.get("/api/years/2026/exclusions"))) == 4  # carried over from last year's draw
     ok(c.post("/api/years/2026/draw", json={}))
     y26 = {p["giver"]: p["receiver"] for p in ok(c.post("/api/years/2026/reveal", json={"password": "secret1"}))}
 
@@ -151,7 +151,7 @@ def test_rules_language_and_no_repeat(client, tmp_path):
 
     # adding an exclusion after the draw forces a redraw of whoever breaks it
     giver = next(g for g in names if g != "Kata" and y26[g] != "Kata" and g not in dict(couples) and g not in dict(couples).values())
-    ok(c.post("/api/exclusions", json={"a_id": ids[giver], "b_id": ids[y26[giver]]}))
+    ok(c.post("/api/years/2026/exclusions", json={"a_id": ids[giver], "b_id": ids[y26[giver]]}))
     ok(c.post("/api/years/2026/draw", json={"selected_ids": [], "confirm": True}))
     after = {p["giver"]: p["receiver"] for p in ok(c.post("/api/years/2026/reveal", json={"password": "secret1"}))}
     assert after[giver] != y26[giver]
@@ -161,9 +161,9 @@ def test_impossible_rules_are_reported(client):
     c = client
     ok(c.post("/api/setup", json={"name": "Mom", "password": "secret1"}))
     ids = add_people(c, ["Anna", "Bela", "Csilla"])
-    ok(c.post("/api/exclusions", json={"a_id": ids["Anna"], "b_id": ids["Bela"]}))
-    ok(c.post("/api/exclusions", json={"a_id": ids["Anna"], "b_id": ids["Csilla"]}))
     ok(c.post("/api/years", json={"year": 2026}))
+    ok(c.post("/api/years/2026/exclusions", json={"a_id": ids["Anna"], "b_id": ids["Bela"]}))
+    ok(c.post("/api/years/2026/exclusions", json={"a_id": ids["Anna"], "b_id": ids["Csilla"]}))
     r = c.post("/api/years/2026/draw", json={})
     assert r.status_code == 422 and "impossible" in r.json()["detail"]
 
@@ -534,7 +534,7 @@ def test_fixed_pairs(client):
     assert c.post("/api/years/2026/fixed", json={"giver_id": ids["Anna"], "receiver_id": ids["Anna"]}).status_code == 422
     assert [f["giver"] for f in ok(c.get("/api/years/2026/fixed"))] == ["Nagymama"]
     # even an exclusion between them is overridden by the fixed pair
-    ok(c.post("/api/exclusions", json={"a_id": ids["Nagymama"], "b_id": ids["Peti"]}))
+    ok(c.post("/api/years/2026/exclusions", json={"a_id": ids["Nagymama"], "b_id": ids["Peti"]}))
     for _ in range(20):
         ok(c.post("/api/years/2026/draw", json={"everyone": True, "confirm": True}))
         pairs = {p["giver"]: p["receiver"] for p in ok(c.post("/api/years/2026/reveal", json={"password": "secret1"}))}

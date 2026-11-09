@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How it works · Family Secret Santa</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    main { max-width: 820px; }
+    .doc h2 { margin-top: 0; }
+    .doc h3 { color: var(--green); margin: 18px 0 6px; font-size: 16px; }
+    .doc p, .doc li { line-height: 1.6; }
+    .doc ul, .doc ol { padding-left: 22px; }
+    .doc li { margin: 4px 0; }
+    .toc { columns: 2; column-gap: 24px; padding-left: 18px; }
+    @media (max-width: 600px) { .toc { columns: 1; } }
+    .rule { border-left: 4px solid var(--gold); background: #fffaf0; padding: 8px 12px; margin: 8px 0; border-radius: 4px; }
+    .why { color: var(--muted); font-size: 14px; }
+    code { background: #f3ede1; padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+    table.t td, table.t th { vertical-align: top; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🎅 Family Secret Santa — how it works</h1>
+  <div><a href="/" style="color:#fff">← back to the app</a></div>
+</header>
+<main class="doc">
+
+<section class="card">
+  <h2>Purpose and goal</h2>
+  <p>Family Secret Santa organises gift draws for a group of people — our big, extended "family", which may
+    well reach beyond relatives. Everyone draws one person to buy a present for, and nobody should know who
+    drew them until the gifts are opened.</p>
+  <p>The app's goals, in order of importance:</p>
+  <ol>
+    <li><b>Keep the secret.</b> Nobody — not even the people running the app — sees who drew whom unless an admin
+      deliberately unlocks it, and every unlock is logged.</li>
+    <li><b>Fair, random draws that respect the family's wishes</b>: couples apart, no repeats of last year, fixed
+      pairs for small children or grandparents, several draws side by side.</li>
+    <li><b>Good presents without phoning around</b>: everyone can list a few gift ideas within the budget, and their
+      Secret Santa is kept up to date.</li>
+    <li><b>Include everyone</b>, also those without e-mail or who don't use the internet, through helpers.</li>
+    <li><b>Make it feel festive</b>: postcards from the North Pole, in Hungarian or English, with a fresh design each year.</li>
+  </ol>
+  <h3>Contents</h3>
+  <ol class="toc">
+    <li><a href="#people">People: participants, helpers, groups</a></li>
+    <li><a href="#admins">Admins</a></li>
+    <li><a href="#draws">Draws</a></li>
+    <li><a href="#rules">Draw rules</a></li>
+    <li><a href="#reshuffle">Changing the list after a draw</a></li>
+    <li><a href="#mail">What participants receive</a></li>
+    <li><a href="#page">The personal page</a></li>
+    <li><a href="#ideas">Gift ideas</a></li>
+    <li><a href="#digest">The daily digest</a></li>
+    <li><a href="#design">Card design and language</a></li>
+    <li><a href="#secrecy">Secrecy and privacy</a></li>
+    <li><a href="#limits">Limits worth knowing</a></li>
+  </ol>
+</section>
+
+<section class="card" id="people">
+  <h2>1 · People: participants, helpers, groups</h2>
+  <h3>Participants</h3>
+  <ul>
+    <li>Everyone who can take part in a draw is a <b>participant</b>, with a name, an e-mail address and a postcard
+      language (Hungarian by default, or English).</li>
+    <li>Removing someone who took part in a past draw <b>archives</b> them: their history stays, and they are left out
+      of new draws. Someone who never took part is deleted. An archived person can be restored by editing them.</li>
+  </ul>
+  <h3>Helpers (people without e-mail)</h3>
+  <div class="rule">Someone without an e-mail address must have a <b>helper</b>: another participant who has their own e-mail.</div>
+  <ul>
+    <li>All of that person's mail — invitation, postcard, daily digest — goes to the helper, clearly marked
+      "for &lt;name&gt;". The helper also manages their gift ideas through the link in that mail.</li>
+    <li>A helper can't remove their own e-mail address while they help someone, and a helper can't themselves need a helper.</li>
+    <li><b>A person never draws their own helper — in any draw.</b>
+      <span class="why">Why: the helper reads that person's postcard and would otherwise learn who their own Secret Santa is.
+      This is the only draw rule that applies to every draw.</span></li>
+  </ul>
+  <h3>Groups</h3>
+  <ul>
+    <li>Groups are named, reusable lists of participants ("Family circle", "Cousins"). Anyone can be in any number of groups.</li>
+    <li>Groups are only a starting point: a draw copies the group's people when it is created, or with
+      <b>Quick add a group</b>. Changing or deleting a group later doesn't change existing draws.</li>
+  </ul>
+</section>
+
+<section class="card" id="admins">
+  <h2>2 · Admins</h2>
+  <ul>
+    <li>Up to <b>5 admins</b>. The first admin is created at setup, is mandatory and can't be removed; any admin can add or
+      remove the others.</li>
+    <li>Admins sign in with a <b>password</b>, a <b>Google account</b>, or both. Google sign-in only accepts verified
+      Google addresses that are registered as admins; others are refused and the attempt is logged.</li>
+    <li>A login lasts 30 minutes from the last action.</li>
+    <li>Admins manage participants, groups, draws, rules, designs and sending — but <b>don't see who drew whom</b>.</li>
+    <li><b>Unlocking the matches</b> of a draw needs a fresh confirmation (typing the password again, or a new Google
+      sign-in that is valid for one unlock within 2 minutes) and is always written to the activity log as
+      <code>MATCHES REVEALED</code>, visible to all admins.</li>
+    <li>Every change (participants, rules, draws, designs, sending, gift-idea edits by admins) appears in the <b>📜 Log</b>.</li>
+    <li>There is <b>no password reset</b>: the matches are encrypted with the admins' passwords, so keep a second admin as a backup.</li>
+  </ul>
+</section>
+
+<section class="card" id="draws">
+  <h2>3 · Draws</h2>
+  <ul>
+    <li>A <b>draw</b> is a calendar year plus an optional name, e.g. <i>2026 · Family circle</i>, <i>2026 · Everyone</i>,
+      <i>2026 · Lucky 6</i>. Any number of draws can run side by side; names are unique within a year.</li>
+    <li>Each draw has its own participants, matches, rules, fixed pairs, budget, gift-exchange date, note from Santa,
+      card design, postcards, links, gift ideas and digests. Someone in two draws gets two postcards, and each names its draw.</li>
+    <li><b>Who takes part</b> when a draw is created: the same people as last year's draw with the same name, everyone,
+      a group, a random <i>N</i> people (from a group or from everyone), or nobody yet. The list can always be edited.</li>
+    <li>A new draw starts with the budget, note, rule switches, design and "never draw each other" pairs of last
+      year's draw <b>with the same name</b>.</li>
+    <li>Deleting a draw removes its participants list, matches, links, gift ideas and rules. It can't be undone.</li>
+  </ul>
+</section>
+
+<section class="card" id="rules">
+  <h2>4 · Draw rules</h2>
+  <p>Every draw follows these rules. If they can't all be met at once, the app <b>refuses to draw</b> and says so —
+    it never quietly breaks a rule.</p>
+  <ol>
+    <li class="rule"><b>One each.</b> Everyone in the draw gives exactly one present and receives exactly one. Nobody draws themselves.</li>
+    <li class="rule"><b>Never draw each other</b> (per draw). Pairs set on a draw's page can't draw each other, in either direction.
+      They apply to <b>that draw only</b>: a pair can be excluded in one draw and allowed in another.
+      <b>Copy rules from another draw</b> adds another draw's pairs on purpose; it never removes any.</li>
+    <li class="rule"><b>Not your own helper</b> (every draw, see <a href="#people">helpers</a>).</li>
+    <li class="rule"><b>No repeat of last year</b> (switch per draw, on by default). Nobody gets the same person as in last
+      year's draw <b>with the same name</b> that was actually drawn.</li>
+    <li class="rule"><b>Not the same giftee in two draws</b> (switch per draw, on by default). Nobody gets the same person as in
+      another draw of the same calendar year that has already been drawn.</li>
+    <li class="rule"><b>Fixed pairs</b> (per draw). An admin can set "A gives to B" by hand, e.g. Grandma → little Peti.
+      A fixed pair <b>wins over every other rule</b>: A can only draw B, and nobody else can draw B. In a draw, each person can
+      be the giver of at most one fixed pair and the receiver of at most one. Fixed pairs are visible to all admins.</li>
+  </ol>
+  <p><b>Randomness:</b> among all assignments that satisfy the rules, every one is equally likely. If random tries can't
+    find one, an exhaustive search decides whether any valid assignment exists at all.</p>
+  <p>Rules or fixed pairs changed <b>after</b> a draw apply at the next reshuffle.</p>
+</section>
+
+<section class="card" id="reshuffle">
+  <h2>5 · Changing the list after a draw</h2>
+  <ul>
+    <li>If people are added to or removed from a draw that has been drawn, <b>no postcards can be sent</b> until an admin
+      confirms who to reshuffle.</li>
+    <li>The admin chooses <b>Reshuffle everyone</b> (a completely new draw) or ticks the people who should get a new
+      giftee. Everyone else keeps theirs — useful when presents are already bought.</li>
+    <li>Always included automatically: <b>new people</b>; people <b>whose giftee left</b>; people whose match <b>now breaks a rule</b>.</li>
+    <li>The last two groups are included <b>without being shown</b>, mixed with the same number of randomly chosen
+      <b>decoys</b> (plus a replacement whenever the admin happens to tick one of them), so the reshuffle can't reveal who was
+      giving to whom. The admin sees only a count.</li>
+    <li>If the chosen set still can't be solved, random extra people are added until it can.</li>
+    <li>Everyone who is reshuffled gets a fresh, marked <b>"Updated card"</b> — even if they happen to draw the same person
+      again — so the "not sent" list doesn't give anything away. Their old link stops working.</li>
+  </ul>
+</section>
+
+<section class="card" id="mail">
+  <h2>6 · What participants receive</h2>
+  <p>Every e-mail goes to <b>one person only</b> (no CC/BCC). Mail for someone without e-mail goes to their helper, marked
+    "for &lt;name&gt;". When a draw has a name, it appears in the subject and on the card.</p>
+  <table class="t">
+    <tr><th>E-mail</th><th>When</th><th>What it contains</th></tr>
+    <tr><td><b>✉️ Wish-list invitation</b> (optional)</td>
+      <td>Before the draw, when an admin sends it. By default only to people who don't have a link yet; never replaces a postcard link.</td>
+      <td>A private link to add gift ideas, and the gift budget. No match — nothing has been drawn.</td></tr>
+    <tr><td><b>📮 Postcard</b></td>
+      <td>After the draw, when an admin sends it (all pending at once, or one person). Can be resent.</td>
+      <td>Your giftee's name and their current gift ideas, budget, exchange date, Santa's note, a button to your private page,
+        and a link to read the card in the other language. The <b>subject never names the giftee</b>, because subjects show on lock screens.</td></tr>
+    <tr><td><b>📬 Daily digest</b></td>
+      <td>At most once a day (see <a href="#digest">digest</a>).</td>
+      <td>What changed on your giftee's wish list: new ideas, ideas no longer wanted (with the reason), the current list, the budget.</td></tr>
+  </table>
+  <h3>Links</h3>
+  <ul>
+    <li>Each person has <b>one private link per draw</b>. A postcard link replaces the invitation link; resending a card
+      creates a new link and the old one stops working ("this link is no longer valid").</li>
+    <li>Anyone with the link sees that person's match — like the postcard itself — so links shouldn't be forwarded.</li>
+  </ul>
+</section>
+
+<section class="card" id="page">
+  <h2>7 · The personal page (no login)</h2>
+  <ul>
+    <li>Shows the <b>gift budget</b> prominently, the gift-exchange date, the giftee and the giftee's gift ideas
+      (ideas no longer wanted appear crossed out, with the reason).</li>
+    <li>Lets the person manage <b>their own gift ideas</b> (<a href="#ideas">rules</a>) and
+      <b>copy their ideas from another draw</b> they take part in.</li>
+    <li>Lets them <b>switch the postcard language</b>, optionally getting the card sent again in the new language.</li>
+    <li>Before the draw (invitation link) it shows ideas only, with a note that the postcard will follow.</li>
+    <li>It follows the draw's card design.</li>
+  </ul>
+</section>
+
+<section class="card" id="ideas">
+  <h2>8 · Gift ideas</h2>
+  <ul>
+    <li>Ideas belong to <b>one person in one draw</b>. Up to <b>5</b> ideas that are still wanted, each with an optional link.</li>
+    <li class="rule">An idea that the person's Secret Santa <b>hasn't received yet</b> (not on their postcard or in a digest)
+      can simply be <b>removed</b> — nobody hears about it.</li>
+    <li class="rule">Once received, an idea can't be deleted; it can only be marked <b>no longer wanted</b>, with a reason:
+      already got it / have a similar one, don't want it any more, added by mistake, or other. The Secret Santa is told in the next digest.</li>
+    <li>A crossed-out idea can be <b>restored</b>. If the Secret Santa had already been told it was no longer wanted, it comes back to them as new.</li>
+    <li><b>Copying from another draw</b> brings over only ideas that are still wanted, skips ones already on the list
+      (ignoring upper/lower case), respects the limit of 5, and counts as new for this draw's Secret Santa.</li>
+    <li><b>Admins can edit anyone's ideas</b> (e.g. for small children or grandparents) with exactly the same rules; every edit is logged.</li>
+    <li>If someone's Secret Santa changes in a reshuffle, the new one has seen nothing yet: their ideas count as not received
+      again, and crossed-out ones are dropped.</li>
+  </ul>
+</section>
+
+<section class="card" id="digest">
+  <h2>9 · The daily digest</h2>
+  <ul>
+    <li>Changes to someone's ideas are collected and sent to <b>their Secret Santa</b> in <b>one e-mail per day</b>,
+      after 18:00 Budapest time by default.</li>
+    <li>Only after that Secret Santa's postcard has gone out (until then, the postcard itself will list the ideas).</li>
+    <li>It never repeats something the Secret Santa has already been told. If nothing changed, nothing is sent.</li>
+    <li>After a reshuffle, it goes to the person's <b>new</b> Secret Santa.</li>
+    <li>Admins can see how many updates are waiting and press <b>Send digest now</b>.</li>
+  </ul>
+</section>
+
+<section class="card" id="design">
+  <h2>10 · Card design and language</h2>
+  <ul>
+    <li>Each draw has its own design: base theme, accent colour, font, theme animal (optionally in a Santa hat) and
+      decorations, previewed before saving. Postcards, invitations, digests and the personal page all follow it.</li>
+    <li>Postcards are in <b>Hungarian by default</b>; each participant can be set to English, by an admin or by themselves.</li>
+    <li>Texts written by admins (budget, exchange date, Santa's note, draw name) are shown exactly as typed, in every language.</li>
+  </ul>
+</section>
+
+<section class="card" id="secrecy">
+  <h2>11 · Secrecy and privacy</h2>
+  <ul>
+    <li>Matches are stored <b>encrypted</b>. The database file alone doesn't reveal who drew whom. (Digest e-mails waiting to
+      be sent are protected by a separate server key; keep that key outside the data folder, as the README describes.)</li>
+    <li>Sending postcards and digests doesn't show the content to the admin who presses the button.</li>
+    <li>Private links are stored only as fingerprints; the server can't recreate them.</li>
+    <li>To address a digest, the server can find a person's Secret Santa only at the moment that person (or an admin) changes
+      their ideas; it is stored encrypted until the digest goes out.</li>
+    <li>Gift ideas, participant names and e-mail addresses are <b>not</b> secret and not encrypted.</li>
+  </ul>
+</section>
+
+<section class="card" id="limits">
+  <h2>12 · Limits worth knowing</h2>
+  <ul>
+    <li><b>Copies of e-mails:</b> a sending account's "Sent" folder, or an e-mail service's log (e.g. Resend), contains every
+      postcard. Only people who shouldn't know the matches must not have access to it.</li>
+    <li><b>Shared inboxes and helpers</b> see the cards they receive — by design for helpers.</li>
+    <li><b>Small draws:</b> with very few people, the reshuffle decoys give less cover; with 3–4 people it can be guessed.</li>
+    <li><b>Images in e-mails</b> load from the app's address; some mail apps show them only after "show images".</li>
+    <li><b>Email apps differ:</b> Outlook simplifies the card's border; Gmail on Android uses its own fonts.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

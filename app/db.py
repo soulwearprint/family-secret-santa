@@ -110,6 +110,16 @@ CREATE TABLE IF NOT EXISTS group_members (
     PRIMARY KEY (group_id, member_id)
 );
 
+-- "never draw each other" rules, per draw (a_id < b_id). The old global
+-- `exclusions` table is migrated into this once and then left empty.
+CREATE TABLE IF NOT EXISTS draw_exclusions (
+    year INTEGER NOT NULL REFERENCES years(year) ON DELETE CASCADE,
+    a_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    b_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+    PRIMARY KEY (year, a_id, b_id),
+    CHECK (a_id < b_id)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -168,6 +178,12 @@ def init() -> None:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS admins_google_email ON admins (google_email COLLATE NOCASE)")
         conn.execute("UPDATE years SET cal_year = year WHERE cal_year IS NULL")
+        # One-off: global exclusions become per-draw rules. Copy them into every
+        # existing draw (so nothing changes for those), then retire the global list.
+        if conn.execute("SELECT 1 FROM exclusions LIMIT 1").fetchone():
+            conn.execute("INSERT OR IGNORE INTO draw_exclusions (year, a_id, b_id) "
+                         "SELECT y.year, e.a_id, e.b_id FROM years y CROSS JOIN exclusions e")
+            conn.execute("DELETE FROM exclusions")
 
 
 def get_setting(conn: sqlite3.Connection, key: str) -> str | None:

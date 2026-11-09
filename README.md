@@ -6,6 +6,10 @@ their own postcard from the North Pole.
 
 Python 3.11+ · FastAPI · SQLite · no build step.
 
+**📖 How it works:** the app has a built-in guide at `/guide`, linked from the
+admin header. It describes the app's purpose and every rule for draws and for
+what participants receive.
+
 ## Run it
 
 ```bash
@@ -27,13 +31,13 @@ Tests: `pip install -r requirements-dev.txt && python -m pytest -q`
 
 | Requirement | Implementation |
 |---|---|
-| Family members with e-mails | **Family** tab. Removing someone who took part in a past year archives them, so history is kept. |
+| Participants with e-mails | **👥 Participants** tab. Removing someone who took part in a past draw archives them, so history is kept. |
 | 1-to-1 random draw | Uniformly random among all valid draws: everyone gives once, receives once, never draws themselves (`app/draw.py`). |
-| People without e-mail | In the Family tab, leave the e-mail empty and pick a **helper**, for example a parent for a small child or a grandchild for a grandparent. The helper receives that person's invitation, postcard and digests, clearly marked *"for Peti"*, and manages their gift ideas. A person never draws their own helper, because otherwise the helper would learn who their own Secret Santa is. |
+| People without e-mail | In the Participants tab, leave the e-mail empty and pick a **helper**, for example a parent for a small child or a grandchild for a grandparent. The helper receives that person's invitation, postcard and digests, clearly marked *"for Peti"*, and manages their gift ideas. A person never draws their own helper, because otherwise the helper would learn who their own Secret Santa is. |
 | Fixed pairs | On the year page, **📌 Fixed pairs** sets pairs by hand before the random draw (for example Grandma → Peti). They win over every other rule, everyone else is drawn randomly, and all admins can see them. |
-| Couples never draw each other | **Family → Never draw each other**. Each rule works both ways and applies every year. |
+| Pairs that never draw each other | Set **per draw**, on the draw's page under **💑 Never draw each other**. A pair can be excluded in one draw and allowed in another, and rules never spill over between draws. A new draw takes over the rules of last year's draw with the same name. **Copy rules from another draw** reuses a set on purpose. The one rule that applies to every draw: nobody draws their own helper, because the helper reads that person's postcard. |
 | No repeat of last year | On by default for each year (**Details** → *Nobody draws the same person as in the previous year's draw*). It compares against the most recent earlier year that has a draw. |
-| Postcard language | Hungarian by default. An admin sets **English** per person in the Family tab, or the participant switches it from the link in their card, optionally getting the card resent. |
+| Postcard language | Hungarian by default. An admin sets **English** per person in the Participants tab, or the participant switches it from the link in their card, optionally getting the card resent. |
 | Wish-list invitation before the draw | **✉️ Send wish-list invitations** on a year that hasn't been drawn. Each person gets an e-mail with their own link, so they can add gift ideas early. The invitation shows the budget. Postcards then list the giftee's ideas directly. |
 | Daily digest to the giver | Changes to gift ideas reach each Secret Santa in **one e-mail a day** (default 18:00, Europe/Budapest), listing new ideas, ideas that are no longer wanted (with the reason), and the current list. It goes out only after that Secret Santa's postcard has been sent, never repeats anything, and follows reshuffles. Admins can **Send digest now**. |
 | Removing vs. marking obsolete | An idea the Secret Santa hasn't received yet (not in their postcard or a digest) can simply be **removed**, and nobody hears about it. Once received, it can only be marked **no longer wanted**, with a reason: *already got it / similar*, *don't want it any more*, *added by mistake*, *other*. It then shows struck through on the giver's page and in the next digest. The owner can **restore** it. |
@@ -152,7 +156,7 @@ run any number of draws side by side.
   - postcards, links, gift ideas and digests
 - **Someone in two draws** gets two postcards. Each card names its draw in
   the subject and the header.
-- **Groups** (Family tab) are reusable named lists of people, and anyone can
+- **Groups** (Participants tab) are reusable named lists of people, and anyone can
   be in any number of groups. **＋ New draw** takes its people from one of:
   - last year's draw with the same name
   - everyone
@@ -160,6 +164,9 @@ run any number of draws side by side.
   - a random *N* people from a group or from everyone
   - nobody yet
 - **Rules:**
+  - *Never draw each other* pairs belong to one draw. Before this change
+    they were global; on upgrade, each existing pair was copied into every
+    existing draw, so those draws behave exactly as before.
   - *No repeat* compares with last year's draw **of the same name**.
   - *Not in two draws*, on by default, stops anyone getting the same giftee
     in two draws of the same year.

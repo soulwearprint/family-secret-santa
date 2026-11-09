@@ -71,3 +71,9 @@ def test_app_name_follows_language(client):
     assert 'Pereputty Angyalkázás' in client.get("/guide?lang=hu").text.split("</h1>")[0]
     src = (STATIC / "i18n.js").read_text(encoding="utf-8")
     assert '"Family Secret Santa": "Pereputty Angyalkázás"' in src
+
+
+def test_participant_page_title_uses_app_name_per_language():
+    src = (STATIC / "participant.html").read_text(encoding="utf-8")
+    assert 'name: "Pereputty Angyalkázás"' in src and 'name: "Family Secret Santa"' in src
+    assert "Titkos Mikulás ${y}" not in src

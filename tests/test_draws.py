@@ -225,3 +225,14 @@ def test_log_names_the_draw_not_its_internal_id(fam):
     ok(c.post(f"/api/years/{d}/draw", json={}))
     row = next(r for r in ok(c.get("/api/audit")) if r["action"] == "draw")
     assert row["detail"].startswith("2026 · Cousins:") and str(d) not in row["detail"]
+
+
+def test_favicon_is_served_and_linked(client):
+    ico = client.get("/favicon.ico")
+    assert ico.status_code == 200 and ico.headers["content-type"] == "image/x-icon"
+    assert ico.content[:4] == b"\x00\x00\x01\x00"  # ICO header
+    for path in ("/static/favicon.svg", "/static/favicon-32.png", "/static/apple-touch-icon.png"):
+        assert client.get(path).status_code == 200, path
+    for page in ("/", "/guide", "/guide?lang=hu", "/p/sometoken"):
+        html = client.get(page).text
+        assert 'rel="icon" href="/static/favicon.svg"' in html and 'rel="apple-touch-icon"' in html, page

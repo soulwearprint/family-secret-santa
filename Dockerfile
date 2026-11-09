@@ -1,4 +1,4 @@
-# Family Secret Santa — one small container. Attach a persistent volume at /data
+# Pereputty Angyalkázás (family Secret Santa) — one small container. Attach a persistent volume at /data
 # (on Railway: a Railway volume; Railway rejects the Dockerfile VOLUME keyword).
 FROM python:3.12-slim
 WORKDIR /app

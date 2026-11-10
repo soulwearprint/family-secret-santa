@@ -372,6 +372,7 @@ const HU = {
   "login": "belépés",
   "member added": "résztvevő hozzáadva",
   "member archived": "résztvevő archiválva",
+  "member deleted": "résztvevő törölve",
   "member edited": "résztvevő módosítva",
   "participants changed": "résztvevők módosítva",
   "password changed": "jelszó módosítva",
